@@ -1,3 +1,3 @@
 packages:
   - apps/*
-# If you really do need workspaces under packages later, add them back intentionally.
+  - packages/*
