@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "framework": "nextjs",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm -C apps/web build",
+  "env": {
+    "NEXT_TELEMETRY_DISABLED": "1"
+  }
+}
