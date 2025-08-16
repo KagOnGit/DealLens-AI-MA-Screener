@@ -1,0 +1,26 @@
+{
+  "name": "@deallens/db",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "generate": "prisma generate",
+    "push": "prisma db push",
+    "migrate": "prisma migrate dev",
+    "studio": "prisma studio",
+    "reset": "prisma migrate reset",
+    "seed": "tsx src/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.9",
+    "prisma": "^5.6.0",
+    "tsx": "^3.14.0",
+    "typescript": "^5.2.2"
+  }
+}

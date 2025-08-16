@@ -1,0 +1,26 @@
+# Install with: pip install -r requirements.txt -c ../../constraints.txt
+-c ../../constraints.txt
+
+# Core dependencies (versions defined in constraints.txt)
+celery[redis]
+redis
+sqlalchemy
+alembic
+asyncpg
+psycopg2-binary
+pydantic
+pydantic-settings
+httpx
+requests
+aiohttp
+openai
+pandas
+numpy
+beautifulsoup4
+yfinance
+python-dotenv
+pytz
+python-dateutil
+schedule
+prometheus-client
+packaging

@@ -1,0 +1,282 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  role          UserRole @default(ANALYST)
+  passwordHash  String?
+  isActive      Boolean  @default(true)
+  lastLogin     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  savedScreens  SavedScreen[]
+  watchlists    Watchlist[]
+  alerts        Alert[]
+  sessions      UserSession[]
+
+  @@map("users")
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+model Company {
+  id                String   @id @default(cuid())
+  ticker            String?  @unique
+  name              String
+  description       String?
+  industry          String?
+  sector            String?
+  country           String?
+  marketCap         Decimal? @db.Decimal(15, 2)
+  employees         Int?
+  foundedYear       Int?
+  website           String?
+  headquarters      String?
+  isPublic          Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  financialMetrics  FinancialMetric[]
+  deals             Deal[]
+  dealsAsTarget     Deal[]            @relation("TargetCompany")
+  marketData        MarketData[]
+  watchlistItems    WatchlistItem[]
+  alerts            Alert[]
+
+  @@index([ticker])
+  @@index([industry])
+  @@index([sector])
+  @@index([marketCap])
+  @@map("companies")
+}
+
+model FinancialMetric {
+  id             String      @id @default(cuid())
+  companyId      String
+  period         String      // e.g., "Q1 2024", "FY 2023"
+  periodType     PeriodType
+  fiscalYear     Int
+  fiscalQuarter  Int?
+  
+  // Income Statement
+  revenue        Decimal?    @db.Decimal(15, 2)
+  grossProfit    Decimal?    @db.Decimal(15, 2)
+  operatingIncome Decimal?   @db.Decimal(15, 2)
+  netIncome      Decimal?    @db.Decimal(15, 2)
+  ebitda         Decimal?    @db.Decimal(15, 2)
+  eps            Decimal?    @db.Decimal(10, 2)
+  
+  // Balance Sheet
+  totalAssets    Decimal?    @db.Decimal(15, 2)
+  totalLiabilities Decimal?  @db.Decimal(15, 2)
+  equity         Decimal?    @db.Decimal(15, 2)
+  cash           Decimal?    @db.Decimal(15, 2)
+  debt           Decimal?    @db.Decimal(15, 2)
+  
+  // Cash Flow
+  operatingCashFlow Decimal? @db.Decimal(15, 2)
+  freeCashFlow   Decimal?    @db.Decimal(15, 2)
+  
+  // Ratios
+  peRatio        Decimal?    @db.Decimal(8, 2)
+  priceToBook    Decimal?    @db.Decimal(8, 2)
+  debtToEquity   Decimal?    @db.Decimal(8, 2)
+  roe            Decimal?    @db.Decimal(8, 2)
+  roa            Decimal?    @db.Decimal(8, 2)
+  grossMargin    Decimal?    @db.Decimal(8, 2)
+  operatingMargin Decimal?   @db.Decimal(8, 2)
+  
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, period, periodType])
+  @@index([fiscalYear])
+  @@index([periodType])
+  @@map("financial_metrics")
+}
+
+model MarketData {
+  id          String   @id @default(cuid())
+  companyId   String
+  date        DateTime
+  open        Decimal  @db.Decimal(10, 2)
+  high        Decimal  @db.Decimal(10, 2)
+  low         Decimal  @db.Decimal(10, 2)
+  close       Decimal  @db.Decimal(10, 2)
+  volume      BigInt
+  adjustedClose Decimal @db.Decimal(10, 2)
+  
+  createdAt   DateTime @default(now())
+  
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@unique([companyId, date])
+  @@index([date])
+  @@map("market_data")
+}
+
+model Deal {
+  id                String     @id @default(cuid())
+  acquirerId        String
+  targetId          String
+  announcedDate     DateTime
+  closedDate        DateTime?
+  status            DealStatus @default(ANNOUNCED)
+  dealValue         Decimal?   @db.Decimal(15, 2)
+  dealType          DealType
+  paymentMethod     PaymentMethod?
+  
+  // Deal Details
+  synopsis          String?
+  rationale         String?
+  synergies         Decimal?   @db.Decimal(15, 2)
+  premium           Decimal?   @db.Decimal(8, 2)
+  
+  // Multiples
+  evRevenue         Decimal?   @db.Decimal(8, 2)
+  evEbitda          Decimal?   @db.Decimal(8, 2)
+  priceToBook       Decimal?   @db.Decimal(8, 2)
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  acquirer Company @relation(fields: [acquirerId], references: [id])
+  target   Company @relation("TargetCompany", fields: [targetId], references: [id])
+
+  @@index([announcedDate])
+  @@index([status])
+  @@index([dealType])
+  @@map("deals")
+}
+
+model SavedScreen {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  criteria    Json     // Screening criteria as JSON
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("saved_screens")
+}
+
+model Watchlist {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items WatchlistItem[]
+
+  @@map("watchlists")
+}
+
+model WatchlistItem {
+  id          String   @id @default(cuid())
+  watchlistId String
+  companyId   String
+  addedAt     DateTime @default(now())
+  notes       String?
+
+  watchlist Watchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([watchlistId, companyId])
+  @@map("watchlist_items")
+}
+
+model Alert {
+  id        String      @id @default(cuid())
+  userId    String
+  companyId String?
+  type      AlertType
+  condition Json        // Alert condition as JSON
+  isActive  Boolean     @default(true)
+  triggered Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("alerts")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum PeriodType {
+  QUARTERLY
+  ANNUAL
+  TTM
+}
+
+enum DealStatus {
+  ANNOUNCED
+  PENDING
+  COMPLETED
+  WITHDRAWN
+  TERMINATED
+}
+
+enum DealType {
+  MERGER
+  ACQUISITION
+  SPIN_OFF
+  JOINT_VENTURE
+  ASSET_SALE
+}
+
+enum PaymentMethod {
+  CASH
+  STOCK
+  MIXED
+}
+
+enum AlertType {
+  PRICE_CHANGE
+  VOLUME_SPIKE
+  NEWS
+  DEAL_ANNOUNCED
+  FINANCIAL_METRIC
+}

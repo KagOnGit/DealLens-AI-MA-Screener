@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+:root {
+  --background: #000000;
+  --foreground: #ffffff;
+  --terminal-bg: #000000;
+  --terminal-surface: #0a0a0a;
+  --terminal-border: #1a1a1a;
+  --terminal-primary: #ff9900;
+  --terminal-green: #10b981;
+  --terminal-red: #ef4444;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-terminal-bg: var(--terminal-bg);
+  --color-terminal-surface: var(--terminal-surface);
+  --color-terminal-border: var(--terminal-border);
+  --color-terminal-primary: var(--terminal-primary);
+  --color-terminal-green: var(--terminal-green);
+  --color-terminal-red: var(--terminal-red);
+  --font-mono: 'SF Mono', Monaco, Inconsolata, 'Roboto Mono', 'source-code-pro', Menlo, 'Courier New', monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  overflow-x: hidden;
+}
+
+/* Bloomberg Terminal specific styles */
+.terminal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #ff9900 #1a1a1a;
+}
+
+.terminal-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.terminal-scrollbar::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.terminal-scrollbar::-webkit-scrollbar-thumb {
+  background: #ff9900;
+  border-radius: 4px;
+}
+
+.terminal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #ffaa00;
+}
+
+/* Custom table styles */
+.terminal-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.terminal-table th,
+.terminal-table td {
+  border-bottom: 1px solid #1a1a1a;
+  border-right: 1px solid #1a1a1a;
+}
+
+.terminal-table th:last-child,
+.terminal-table td:last-child {
+  border-right: none;
+}
+
+/* Price change animations */
+.price-up {
+  color: #10b981;
+  animation: flash-green 0.5s ease-out;
+}
+
+.price-down {
+  color: #ef4444;
+  animation: flash-red 0.5s ease-out;
+}
+
+@keyframes flash-green {
+  0% { background-color: rgba(16, 185, 129, 0.3); }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-red {
+  0% { background-color: rgba(239, 68, 68, 0.3); }
+  100% { background-color: transparent; }
+}
+
+/* Glowing effects */
+.glow-orange {
+  box-shadow: 0 0 5px #ff9900, 0 0 10px #ff9900, 0 0 15px #ff9900;
+}
+
+.glow-green {
+  box-shadow: 0 0 5px #10b981, 0 0 10px #10b981, 0 0 15px #10b981;
+}
+
+.glow-red {
+  box-shadow: 0 0 5px #ef4444, 0 0 10px #ef4444, 0 0 15px #ef4444;
+}

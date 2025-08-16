@@ -1,0 +1,24 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY turbo.json ./
+COPY apps/web/package*.json ./apps/web/
+COPY packages/db/package*.json ./packages/db/
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY apps/web ./apps/web
+COPY packages/db ./packages/db
+
+# Set working directory to web app
+WORKDIR /app/apps/web
+
+EXPOSE 3000
+
+# Start development server
+CMD [\"npm\", \"run\", \"dev\"]

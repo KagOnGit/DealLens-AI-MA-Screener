@@ -1,0 +1,15 @@
+{
+  "name": "deallens-ai-ma-screener",
+  "private": true,
+  "packageManager": "pnpm@10.14.0",
+  "devDependencies": { "turbo": "1.13.4" },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "build": "turbo run build",
+    "docker:up": "docker compose up -d --build",
+    "db:generate": "pnpm --filter ./packages/db prisma generate",
+    "db:push": "pnpm --filter ./packages/db prisma db push"
+  }
+}

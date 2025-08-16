@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # Redis service for Celery broker/backend
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 10s
+      interval: 30s
+      retries: 5
+    networks:
+      - deallens_network
+
+  # Celery Worker
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/deallens
+      - CELERY_LOGLEVEL=info
+      - CELERY_CONCURRENCY=2
+      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
+      - NEWS_API_KEY=${NEWS_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PYTHONPATH=/app
+    volumes:
+      - .:/app
+      - ../api/src:/app/api/src  # Mount API models
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    command: ["./start_worker.sh"]
+    networks:
+      - deallens_network
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app inspect ping"]
+      timeout: 10s
+      interval: 30s
+      retries: 5
+
+  # Celery Beat Scheduler
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/deallens
+      - CELERY_LOGLEVEL=info
+      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
+      - NEWS_API_KEY=${NEWS_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PYTHONPATH=/app
+    volumes:
+      - .:/app
+      - ../api/src:/app/api/src  # Mount API models
+      - celery_beat_data:/app/beat  # Persistent storage for beat schedule
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    command: ["./start_beat.sh"]
+    networks:
+      - deallens_network
+
+  # Celery Flower (optional monitoring)
+  celery_flower:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - FLOWER_PORT=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - celery_worker
+    restart: unless-stopped
+    command: ["celery", "-A", "app", "flower", "--port=5555"]
+    networks:
+      - deallens_network
+
+  # PostgreSQL (if not already defined in main compose file)
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=deallens
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - deallens_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      timeout: 10s
+      interval: 10s
+      retries: 5
+
+volumes:
+  redis_data:
+  postgres_data:
+  celery_beat_data:
+
+networks:
+  deallens_network:
+    driver: bridge
