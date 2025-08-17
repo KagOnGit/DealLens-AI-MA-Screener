@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/deallens"
+    ASYNC_DATABASE_URL: Optional[str] = None  # Async version of DATABASE_URL
+    DB_INIT_STRATEGY: str = "auto"  # auto|create|alembic|none
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379"

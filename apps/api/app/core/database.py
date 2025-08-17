@@ -13,7 +13,13 @@ from .config import settings
 Base = declarative_base()
 
 # Async engine & session
-ASYNC_DATABASE_URL = os.getenv("ASYNC_DATABASE_URL") or settings.ASYNC_DATABASE_URL or ""
+ASYNC_DATABASE_URL = (
+    os.getenv("ASYNC_DATABASE_URL") 
+    or settings.ASYNC_DATABASE_URL 
+    or settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+    if settings.DATABASE_URL
+    else ""
+)
 engine = create_async_engine(ASYNC_DATABASE_URL, echo=False, pool_pre_ping=True)
 SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
