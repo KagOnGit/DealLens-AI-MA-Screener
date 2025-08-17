@@ -1,16 +1,21 @@
 {
   "name": "deallens-ai-ma-screener",
   "private": true,
-  "packageManager": "pnpm@10.14.0",
   "engines": {
-    "node": ">=18.18 <21"
+    "node": ">=18.18"
   },
-  "devDependencies": { "turbo": "1.13.4" },
+  "dependencies": {
+    "next": "15.4.6"
+  },
+  "devDependencies": { 
+    "turbo": "1.13.4" 
+  },
   "scripts": {
-    "dev": "turbo run dev --parallel",
-    "lint": "turbo run lint",
+    "dev": "cd apps/web && npm run dev",
+    "build": "cd apps/web && npm run build",
+    "start": "cd apps/web && npm start",
+    "lint": "cd apps/web && npm run lint",
     "typecheck": "turbo run typecheck",
-    "build": "turbo run build",
     "docker:up": "docker compose up -d --build",
     "db:generate": "pnpm --filter ./packages/db prisma generate",
     "db:push": "pnpm --filter ./packages/db prisma db push"
