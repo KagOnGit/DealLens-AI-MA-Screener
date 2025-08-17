@@ -1,7 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 
 logger = logging.getLogger("uvicorn.error")
@@ -20,13 +25,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# Rate limiting setup
+limiter = Limiter(key_func=get_remote_address, default_limits=[settings.RATE_LIMIT_GENERAL, settings.RATE_LIMIT_BURST])
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+@app.exception_handler(RateLimitExceeded)
+async def ratelimit_handler(request, exc):
+    return JSONResponse(status_code=429, content={"detail": "Too Many Requests"})
+
 # Configure CORS with proper settings
-origins = settings.ALLOWED_ORIGINS.split(",")
-logger.info(f"CORS allowed origins: {origins}")
+logger.info(f"CORS allowed origins: {settings.ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.ALLOWED_ORIGINS or ["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,16 +52,19 @@ try:
 except Exception as e:
     logger.error("Router include failed: %s", e)
 
-# Health endpoints
+# Health endpoints (exempt from rate limiting)
 @app.get("/status")
+@limiter.exempt
 async def api_status():
     return {"status": "ok", "service": "api"}
 
 @app.get("/healthz")
+@limiter.exempt
 async def healthz():
     return {"status": "ok"}
 
 @app.get("/readyz")
+@limiter.exempt
 async def readyz():
     try:
         from app.core.database import AsyncSessionLocal

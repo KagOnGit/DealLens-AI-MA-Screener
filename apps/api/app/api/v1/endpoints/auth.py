@@ -2,9 +2,11 @@
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 # From app.core.*
 from app.core.database import get_db
@@ -36,9 +38,15 @@ from app.schemas.auth import (
 
 router = APIRouter()
 
+# Get limiter from main app
+from app.core.config import settings
+limiter = Limiter(key_func=get_remote_address)
+
 
 @router.post("/register", response_model=AuthResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTH)
 def register_user(
+    request: Request,
     user_data: UserRegister,
     db: Session = Depends(get_db),
 ) -> Any:
@@ -90,7 +98,9 @@ def register_user(
 
 
 @router.post("/login", response_model=AuthResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTH)
 def login_user(
+    request: Request,
     user_credentials: UserLogin,
     db: Session = Depends(get_db),
 ) -> Any:
@@ -125,7 +135,9 @@ def login_user(
 
 
 @router.post("/login-form", response_model=AuthResponse)
+@limiter.limit(settings.RATE_LIMIT_AUTH)
 def login_with_form(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ) -> Any:
@@ -161,7 +173,9 @@ def login_with_form(
 
 
 @router.post("/refresh", response_model=Token)
+@limiter.limit(settings.RATE_LIMIT_AUTH)
 def refresh_access_token(
+    request: Request,
     refresh_data: RefreshTokenRequest,
     db: Session = Depends(get_db),
 ) -> Any:
