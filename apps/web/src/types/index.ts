@@ -98,6 +98,73 @@ export interface TabItem {
 // Theme types
 export type Theme = 'light' | 'dark' | 'system';
 
+// Rich detail types for alert pages
+export interface AlertDetail extends Alert {
+  source?: string;
+  deal_detail?: DealDetail;
+  related_companies?: CompanySummary[];
+  timeline?: TimelineEntry[];
+  news_items?: NewsItem[];
+  key_metrics?: {
+    ev_ebitda?: number;
+    ev_sales?: number;
+    pe_delta?: number;
+    synergy_estimate?: number;
+  };
+}
+
+export interface DealDetail {
+  id: string;
+  acquirer: string;
+  target: string;
+  value: number;
+  premium?: number;
+  payment_mix?: {
+    cash_percent?: number;
+    stock_percent?: number;
+    debt_percent?: number;
+  };
+  status: string;
+  announced_at: string;
+  expected_close?: string;
+  key_dates?: {
+    announcement?: string;
+    filing?: string;
+    approvals?: string[];
+    close?: string;
+    termination?: string;
+  };
+  rationale?: string;
+  synergies?: string;
+}
+
+export interface CompanySummary {
+  ticker: string;
+  name: string;
+  logo_url?: string;
+  sector: string;
+  market_cap?: number;
+  price?: number;
+}
+
+export interface TimelineEntry {
+  id: string;
+  date: string;
+  title: string;
+  description?: string;
+  status: 'completed' | 'pending' | 'cancelled';
+  type: 'announcement' | 'filing' | 'approval' | 'close' | 'termination';
+}
+
+export interface NewsItem {
+  id: string;
+  headline: string;
+  source: string;
+  published_at: string;
+  url: string;
+  summary?: string;
+}
+
 // Analytics event types
 export interface AnalyticsEvent {
   event: string;

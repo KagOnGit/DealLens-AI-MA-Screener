@@ -1,4 +1,5 @@
 import { BellIcon, ExclamationTriangleIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
+import Link from 'next/link'
 
 export function AlertsPanel() {
   const alerts = [
@@ -96,9 +97,12 @@ export function AlertsPanel() {
         </div>
       </div>
       
-      <button className="w-full mt-3 bg-terminal-primary text-black py-2 px-4 rounded text-sm font-mono hover:bg-yellow-600 transition-colors">
+      <Link 
+        href="/alerts"
+        className="w-full mt-3 bg-terminal-primary text-black py-2 px-4 rounded text-sm font-mono hover:bg-yellow-600 transition-colors inline-block text-center"
+      >
         VIEW ALL ALERTS
-      </button>
+      </Link>
     </div>
   )
 }

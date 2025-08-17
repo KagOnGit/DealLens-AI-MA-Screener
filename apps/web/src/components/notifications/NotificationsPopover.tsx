@@ -10,10 +10,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { Alert } from '../../types';
 import { getAlerts, markAllAlertsRead, clearAllAlerts, trackEvent } from '../../lib/api';
 
-interface NotificationsPopoverProps {
-  className?: string;
-}
-
 function AlertItem({ alert }: { alert: Alert }) {
   const router = useRouter();
 
@@ -82,8 +78,21 @@ function AlertsSkeleton() {
   );
 }
 
-export function NotificationsPopover({ className = '' }: NotificationsPopoverProps) {
-  const [open, setOpen] = useState(false);
+interface NotificationsPopoverProps {
+  className?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}
+
+export function NotificationsPopover({ 
+  className = '', 
+  open, 
+  onOpenChange, 
+  onMouseEnter, 
+  onMouseLeave 
+}: NotificationsPopoverProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -123,23 +132,34 @@ export function NotificationsPopover({ className = '' }: NotificationsPopoverPro
     },
   });
 
-  const handleBellClick = () => {
+  const handleBellClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     trackEvent('notifications_bell_clicked');
+    onOpenChange(false); // Close popover before navigation
     router.push('/alerts');
   };
 
-  const handleMarkAllRead = () => {
+  const handleMarkAllRead = (e: React.MouseEvent) => {
+    e.stopPropagation();
     markAllReadMutation.mutate();
   };
 
-  const handleClearAll = () => {
+  const handleClearAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
     clearAllMutation.mutate();
   };
 
   const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
+    onOpenChange(newOpen);
     if (newOpen) {
       trackEvent('notifications_popover_opened');
+    }
+  };
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onOpenChange(false);
     }
   };
 
@@ -182,6 +202,8 @@ export function NotificationsPopover({ className = '' }: NotificationsPopoverPro
           sideOffset={8}
           className="bg-[hsl(var(--popover-background))] border border-[hsl(var(--border))] rounded-lg shadow-lg p-4 w-80 z-50 max-h-96 overflow-hidden flex flex-col"
           onOpenAutoFocus={(e) => e.preventDefault()}
+          onMouseEnter={onMouseEnter}
+          onMouseLeave={onMouseLeave}
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
@@ -189,7 +211,7 @@ export function NotificationsPopover({ className = '' }: NotificationsPopoverPro
               Notifications {unreadCount > 0 && `(${unreadCount})`}
             </h3>
             <button
-              onClick={() => setOpen(false)}
+              onClick={() => onOpenChange(false)}
               className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] p-1 rounded focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary-500))]"
               aria-label="Close notifications"
             >

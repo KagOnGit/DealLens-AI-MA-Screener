@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { CompanyHoverCard } from '../companies/CompanyHoverCard'
 
 export function TopCompanies() {
   const [currentTime, setCurrentTime] = useState<string>('--:--:--')
@@ -47,7 +49,16 @@ export function TopCompanies() {
                 index % 2 === 0 ? 'bg-black' : 'bg-terminal-surface'
               }`}>
                 <td className="py-2 px-3 text-terminal-primary font-bold">{company.ticker}</td>
-                <td className="py-2 px-3 text-white">{company.name}</td>
+                <td className="py-2 px-3 text-white">
+                  <CompanyHoverCard ticker={company.ticker}>
+                    <Link 
+                      href={`/companies/${company.ticker}`} 
+                      className="hover:text-terminal-primary transition-colors"
+                    >
+                      {company.name}
+                    </Link>
+                  </CompanyHoverCard>
+                </td>
                 <td className="py-2 px-3 text-right text-white">${company.price.toFixed(2)}</td>
                 <td className={`py-2 px-3 text-right ${
                   company.change >= 0 ? 'text-terminal-green' : 'text-terminal-red'

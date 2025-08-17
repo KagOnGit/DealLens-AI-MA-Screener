@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { ApiStatusBadge } from '../ApiStatusBadge'
 import { NotificationsPopover } from '../notifications/NotificationsPopover'
 import { GlobalSearch } from '../search/GlobalSearch'
@@ -10,6 +10,8 @@ export function Header() {
     timeString: '--:--:--',
     dateString: '--- -- ----'
   })
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     const updateTime = () => {
@@ -34,6 +36,34 @@ export function Header() {
 
     return () => clearInterval(interval)
   }, [])
+
+  // Hover handlers for notifications
+  const handleNotificationsMouseEnter = () => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current)
+      closeTimeoutRef.current = null
+    }
+    setNotificationsOpen(true)
+  }
+
+  const handleNotificationsMouseLeave = () => {
+    closeTimeoutRef.current = setTimeout(() => {
+      setNotificationsOpen(false)
+    }, 120) // 120ms delay as specified
+  }
+
+  const handlePopoverMouseEnter = () => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current)
+      closeTimeoutRef.current = null
+    }
+  }
+
+  const handlePopoverMouseLeave = () => {
+    closeTimeoutRef.current = setTimeout(() => {
+      setNotificationsOpen(false)
+    }, 120)
+  }
 
   return (
     <header className="bg-terminal-surface border-b border-terminal-border px-6 py-4">
@@ -60,7 +90,17 @@ export function Header() {
           </div>
 
           {/* Notifications */}
-          <NotificationsPopover />
+          <div 
+            onMouseEnter={handleNotificationsMouseEnter}
+            onMouseLeave={handleNotificationsMouseLeave}
+          >
+            <NotificationsPopover 
+              open={notificationsOpen}
+              onOpenChange={setNotificationsOpen}
+              onMouseEnter={handlePopoverMouseEnter}
+              onMouseLeave={handlePopoverMouseLeave}
+            />
+          </div>
 
           {/* Time and Date */}
           <div className="text-right text-xs">
