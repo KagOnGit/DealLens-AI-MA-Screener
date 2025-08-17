@@ -2,5 +2,5 @@
   "version": 2,
   "framework": "nextjs",
   "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm --filter web... build"
+  "buildCommand": "pnpm --filter @deallens/web... build"
 }

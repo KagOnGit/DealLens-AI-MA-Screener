@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
-import { Search, Filter, ArrowUpDown, TrendingUp, TrendingDown } from 'lucide-react'
+import { Search, ArrowUpDown, TrendingUp, TrendingDown } from 'lucide-react'
 
 // Mock data
 const mockCompanies = [
@@ -125,7 +125,7 @@ export default function CompaniesPage() {
   const itemsPerPage = 10
 
   const filteredAndSortedCompanies = useMemo(() => {
-    let filtered = mockCompanies.filter(company => {
+    const filtered = mockCompanies.filter(company => {
       const matchesSearch = company.ticker.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            company.name.toLowerCase().includes(searchTerm.toLowerCase())
       

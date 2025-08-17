@@ -1,5 +1,5 @@
 {
-  "name": "web",
+  "name": "@deallens/web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -17,7 +17,7 @@
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^2.30.0",
     "framer-motion": "^10.16.4",
-    "lucide-react": "^0.294.0",
+    "lucide-react": "^0.446.0",
     "next": "15.4.6",
     "react": "^18.3.1",
     "react-chartjs-2": "^5.2.0",
@@ -39,7 +39,7 @@
     "typescript": "^5.9.2"
   },
   "engines": {
-    "node": ">=18.18 <=22.18"
+    "node": ">=18.18 <21"
   },
   "packageManager": "pnpm@10.14.0"
 }
