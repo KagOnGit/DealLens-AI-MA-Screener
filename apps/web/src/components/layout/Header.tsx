@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { MagnifyingGlassIcon, BellIcon } from '@heroicons/react/24/outline'
 import { ApiStatusBadge } from '../ApiStatusBadge'
+import { NotificationsPopover } from '../notifications/NotificationsPopover'
+import { GlobalSearch } from '../search/GlobalSearch'
 
 export function Header() {
   const [currentTime, setCurrentTime] = useState<{ timeString: string; dateString: string }>({
@@ -39,16 +40,7 @@ export function Header() {
       <div className="flex items-center justify-between">
         {/* Search Bar */}
         <div className="flex-1 max-w-xl">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <MagnifyingGlassIcon className="h-4 w-4 text-terminal-primary" />
-            </div>
-            <input
-              type="text"
-              className="block w-full pl-10 pr-3 py-2 border border-terminal-border rounded-md bg-black text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-terminal-primary focus:border-transparent text-sm"
-              placeholder="Search companies, deals, tickers..."
-            />
-          </div>
+          <GlobalSearch />
         </div>
 
         {/* Status and Time */}
@@ -68,12 +60,7 @@ export function Header() {
           </div>
 
           {/* Notifications */}
-          <button className="relative text-terminal-primary hover:text-white transition-colors">
-            <BellIcon className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 h-3 w-3 bg-terminal-red rounded-full text-xs flex items-center justify-center text-white">
-              3
-            </span>
-          </button>
+          <NotificationsPopover />
 
           {/* Time and Date */}
           <div className="text-right text-xs">

@@ -76,4 +76,136 @@ export class ApiClient {
 
 export const apiClient = new ApiClient();
 
+// API Functions using React Query
+import {
+  Alert,
+  Deal,
+  Company,
+  Suggestion,
+  AlertsResponse,
+  DealsResponse,
+  CompaniesResponse,
+  SuggestionsResponse,
+} from '../types';
+
+// Alerts API
+export async function getAlerts({
+  unread,
+  limit = 10,
+}: {
+  unread?: boolean;
+  limit?: number;
+} = {}): Promise<AlertsResponse> {
+  const params = new URLSearchParams();
+  if (unread !== undefined) params.append('unread', unread.toString());
+  if (limit) params.append('limit', limit.toString());
+  
+  return apiClient.get<AlertsResponse>(`/api/v1/alerts?${params.toString()}`);
+}
+
+export async function getAlert(id: string): Promise<Alert> {
+  return apiClient.get<Alert>(`/api/v1/alerts/${id}`);
+}
+
+export async function markAllAlertsRead(): Promise<{ message: string }> {
+  return apiClient.post<{ message: string }>('/api/v1/alerts/mark-all-read');
+}
+
+export async function clearAllAlerts(): Promise<{ message: string }> {
+  return apiClient.delete<{ message: string }>('/api/v1/alerts/clear');
+}
+
+export async function markAlertRead(id: string): Promise<{ message: string }> {
+  return apiClient.put<{ message: string }>(`/api/v1/alerts/${id}/read`);
+}
+
+// Deals API
+export async function getRecentDeals(limit = 10): Promise<DealsResponse> {
+  return apiClient.get<DealsResponse>(`/api/v1/deals?limit=${limit}&sort=announced_at`);
+}
+
+export async function getDeal(id: string): Promise<Deal> {
+  return apiClient.get<Deal>(`/api/v1/deals/${id}`);
+}
+
+export async function getDeals({
+  page = 1,
+  limit = 20,
+  status,
+}: {
+  page?: number;
+  limit?: number;
+  status?: string;
+} = {}): Promise<DealsResponse> {
+  const params = new URLSearchParams();
+  params.append('page', page.toString());
+  params.append('limit', limit.toString());
+  if (status) params.append('status', status);
+  
+  return apiClient.get<DealsResponse>(`/api/v1/deals?${params.toString()}`);
+}
+
+// Companies API
+export async function getCompanies({
+  q,
+  page = 1,
+  limit = 20,
+}: {
+  q?: string;
+  page?: number;
+  limit?: number;
+} = {}): Promise<CompaniesResponse> {
+  const params = new URLSearchParams();
+  params.append('page', page.toString());
+  params.append('limit', limit.toString());
+  if (q) params.append('q', q);
+  
+  return apiClient.get<CompaniesResponse>(`/api/v1/companies?${params.toString()}`);
+}
+
+export async function getCompany(ticker: string): Promise<Company> {
+  return apiClient.get<Company>(`/api/v1/companies/${ticker.toUpperCase()}`);
+}
+
+// Search API
+export async function searchSuggestions(q: string): Promise<Suggestion[]> {
+  if (!q.trim()) return [];
+  
+  const response = await apiClient.get<SuggestionsResponse>(
+    `/api/v1/search?q=${encodeURIComponent(q.trim())}`
+  );
+  return response.suggestions;
+}
+
+// Dashboard API
+export async function getDashboardData(): Promise<{
+  alerts: AlertsResponse;
+  recent_deals: DealsResponse;
+  top_companies: CompaniesResponse;
+}> {
+  const [alerts, deals, companies] = await Promise.all([
+    getAlerts({ limit: 5 }),
+    getRecentDeals(5),
+    getCompanies({ limit: 10 }),
+  ]);
+  
+  return {
+    alerts,
+    recent_deals: deals,
+    top_companies: companies,
+  };
+}
+
+// Analytics tracking
+export function trackEvent(event: string, properties?: Record<string, any>) {
+  if (typeof window !== 'undefined' && window.gtag) {
+    window.gtag('event', event, properties);
+  }
+  
+  // Console log for development
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Analytics Event:', { event, properties });
+  }
+}
+
 export { API_BASE_URL };
