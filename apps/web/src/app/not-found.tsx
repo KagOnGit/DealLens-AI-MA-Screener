@@ -7,7 +7,6 @@ import {
   Home, 
   ArrowLeft, 
   AlertTriangle,
-  Search,
   BarChart3,
   Building2,
   DollarSign,

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { MagnifyingGlassIcon, BellIcon } from '@heroicons/react/24/outline'
+import { ApiStatusBadge } from '../ApiStatusBadge'
 
 export function Header() {
   const [currentTime, setCurrentTime] = useState<{ timeString: string; dateString: string }>({
@@ -90,6 +91,7 @@ export function Header() {
             <div className="w-2 h-2 bg-terminal-green rounded-full mr-1 animate-pulse" />
             CONNECTED
           </span>
+          <ApiStatusBadge />
         </div>
         <div className="flex items-center space-x-4">
           <span>CPU: 45%</span>

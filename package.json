@@ -2,6 +2,9 @@
   "name": "deallens-ai-ma-screener",
   "private": true,
   "packageManager": "pnpm@10.14.0",
+  "engines": {
+    "node": ">=18.18 <21"
+  },
   "devDependencies": { "turbo": "1.13.4" },
   "scripts": {
     "dev": "turbo run dev --parallel",

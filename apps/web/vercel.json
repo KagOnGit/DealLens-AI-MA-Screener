@@ -1,0 +1,7 @@
+{
+  "buildCommand": "pnpm install --no-frozen-lockfile && pnpm --filter web... build",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- apps/web",
+  "framework": "nextjs",
+  "rootDirectory": "apps/web"
+}
