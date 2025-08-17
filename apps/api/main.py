@@ -9,7 +9,7 @@ async def lifespan(app: FastAPI):
     # Be tolerant: don't crash app if DB create_all finds existing objects or DB is cold
     try:
         from app.core.database import init_db
-        await init_db(check_first=True)
+        await init_db()
         logger.info("DB init OK")
     except Exception as e:
         logger.warning("DB init warning (continuing): %s", e)
@@ -33,9 +33,9 @@ async def healthz():
 @app.get("/readyz")
 async def readyz():
     try:
-        from app.core.database import async_session_maker
+        from app.core.database import AsyncSessionLocal
         from sqlalchemy import text
-        async with async_session_maker() as session:
+        async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
         return {"status": "ready"}
     except Exception as e:

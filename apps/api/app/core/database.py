@@ -59,9 +59,12 @@ async def init_db() -> None:
     except Exception as e:
         raise RuntimeError(f"DB connectivity failed: {e}") from e
 
+# Backward compatibility alias
+async_session_maker = AsyncSessionLocal
+
 __all__ = [
     "DATABASE_URL","ASYNC_DATABASE_URL",
     "sync_engine","async_engine",
-    "SessionLocal","AsyncSessionLocal",
+    "SessionLocal","AsyncSessionLocal", "async_session_maker",
     "get_db","get_async_session","init_db",
 ]
