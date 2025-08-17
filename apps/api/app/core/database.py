@@ -4,7 +4,11 @@ from typing import AsyncGenerator, Generator
 from contextlib import asynccontextmanager
 from sqlalchemy import text, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    pass
 
 from app.core.config import settings
 
@@ -64,6 +68,7 @@ async_session_maker = AsyncSessionLocal
 
 __all__ = [
     "DATABASE_URL","ASYNC_DATABASE_URL",
+    "Base",
     "sync_engine","async_engine",
     "SessionLocal","AsyncSessionLocal", "async_session_maker",
     "get_db","get_async_session","init_db",
