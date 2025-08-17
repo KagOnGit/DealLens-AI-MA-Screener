@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { use, useState } from 'react'
 import Link from 'next/link'
 import { formatDistanceToNow, format } from 'date-fns'
 import { 
@@ -25,9 +25,9 @@ import { AlertDetail, TimelineEntry, CompanySummary, NewsItem } from '../../../t
 import { notFound } from 'next/navigation'
 
 interface AlertDetailPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 function getSeverityIcon(severity: AlertDetail['severity']) {
@@ -155,6 +155,7 @@ function NewsItem({ item }: { item: NewsItem }) {
 }
 
 export default function AlertDetailPage({ params }: AlertDetailPageProps) {
+  const resolvedParams = use(params)
   const [isRead, setIsRead] = useState(false)
 
   const { 
@@ -162,8 +163,8 @@ export default function AlertDetailPage({ params }: AlertDetailPageProps) {
     isLoading, 
     error 
   } = useQuery({
-    queryKey: ['alert-detail', params.id],
-    queryFn: () => getAlertDetail(params.id),
+    queryKey: ['alert-detail', resolvedParams.id],
+    queryFn: () => getAlertDetail(resolvedParams.id),
     staleTime: 60_000 // 60 seconds
   })
 
@@ -314,6 +315,48 @@ export default function AlertDetailPage({ params }: AlertDetailPageProps) {
                   {alert.body}
                 </p>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* What Happened & Why It Matters */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* What Happened */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
+            <div className="flex items-center mb-3">
+              <InformationCircleIcon className="h-5 w-5 text-blue-600 mr-2" />
+              <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100">What Happened</h3>
+            </div>
+            <div className="text-blue-800 dark:text-blue-200 space-y-2">
+              <p>{alert.body}</p>
+              {alert.deal_detail && (
+                <p className="text-sm">
+                  {alert.deal_detail.acquirer} announced the acquisition of {alert.deal_detail.target} for ${alert.deal_detail.value.toLocaleString()}M
+                  {alert.deal_detail.premium && ` at a ${alert.deal_detail.premium.toFixed(1)}% premium`}.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Why It Matters */}
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-6">
+            <div className="flex items-center mb-3">
+              <ExclamationTriangleIcon className="h-5 w-5 text-amber-600 mr-2" />
+              <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">Why It Matters</h3>
+            </div>
+            <div className="text-amber-800 dark:text-amber-200 space-y-2">
+              {alert.deal_detail?.rationale && (
+                <p>{alert.deal_detail.rationale}</p>
+              )}
+              {alert.deal_detail?.synergies && (
+                <p className="text-sm">Expected synergies: {alert.deal_detail.synergies}</p>
+              )}
+              {!alert.deal_detail?.rationale && (
+                <p>This alert indicates significant market developments that may impact investment decisions and portfolio performance.</p>
+              )}
+              {alert.ticker && (
+                <p className="text-sm font-medium">Affects: {alert.ticker} and related market participants.</p>
+              )}
             </div>
           </div>
         </div>

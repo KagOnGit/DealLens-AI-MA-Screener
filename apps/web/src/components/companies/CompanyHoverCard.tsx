@@ -51,7 +51,7 @@ function CompanyPreview({ company }: { company: Company }) {
             Market Cap
           </p>
           <p className="text-lg font-bold text-[hsl(var(--popover-foreground))]">
-            ${(company.market_cap / 1000).toFixed(1)}B
+            ${company.market_cap ? (company.market_cap / 1000).toFixed(1) : '0.0'}B
           </p>
         </div>
         <div className="bg-[hsl(var(--muted))] rounded-lg p-3">
@@ -60,12 +60,12 @@ function CompanyPreview({ company }: { company: Company }) {
           </p>
           <div className="flex items-center space-x-1">
             <p className="text-lg font-bold text-[hsl(var(--popover-foreground))]">
-              ${company.price.toFixed(2)}
+              ${company.price ? company.price.toFixed(2) : '0.00'}
             </p>
             <span className={`text-sm font-medium ${
-              company.change >= 0 ? 'text-green-600' : 'text-red-600'
+              (company.change ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
             }`}>
-              ({company.change >= 0 ? '+' : ''}{company.change_percent.toFixed(2)}%)
+              ({(company.change ?? 0) >= 0 ? '+' : ''}{company.change_percent ? company.change_percent.toFixed(2) : '0.00'}%)
             </span>
           </div>
         </div>

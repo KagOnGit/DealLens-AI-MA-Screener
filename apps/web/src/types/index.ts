@@ -165,6 +165,120 @@ export interface NewsItem {
   summary?: string;
 }
 
+// Company detail types
+export interface CompanyDetail extends Company {
+  beta?: number;
+  currency: string;
+  updated_at: string;
+  business_summary?: string;
+  key_risks?: string[];
+  competitive_moats?: string[];
+}
+
+export interface CompanyKpi {
+  label: string;
+  value: string | number;
+  change?: number;
+  change_percent?: number;
+  format?: 'currency' | 'number' | 'percentage' | 'ratio';
+}
+
+export interface TimeseriesPoint {
+  date: string;
+  value: number;
+}
+
+export interface CompanyTimeseries {
+  revenue: TimeseriesPoint[];
+  ebitda: TimeseriesPoint[];
+  fcf: TimeseriesPoint[];
+  margins: {
+    date: string;
+    gross: number;
+    ebitda: number;
+    net: number;
+  }[];
+  multiples: {
+    date: string;
+    pe: number;
+    ev_ebitda: number;
+  }[];
+}
+
+export interface OwnershipSlice {
+  label: string;
+  value: number;
+  color?: string;
+}
+
+export interface CompanyOwnership {
+  slices: OwnershipSlice[];
+  top_holders?: {
+    name: string;
+    percentage: number;
+    shares: number;
+  }[];
+  insider_activity?: {
+    date: string;
+    type: 'buy' | 'sell';
+    shares: number;
+    value: number;
+    person: string;
+  }[];
+}
+
+export interface CompanyNews extends NewsItem {
+  relevance_score?: number;
+  sentiment?: 'positive' | 'negative' | 'neutral';
+}
+
+// Deal detail types
+export interface DealDetail extends Deal {
+  terms: {
+    ev: number;
+    premium: number;
+    payment_mix: {
+      cash_percent: number;
+      stock_percent: number;
+      other_percent?: number;
+    };
+    consideration?: string;
+  };
+  timeline: TimelineEntry[];
+  parties: {
+    acquirer: CompanySummary;
+    target: CompanySummary;
+    advisors?: {
+      financial: string[];
+      legal: string[];
+    };
+  };
+  comparables?: {
+    sector_multiples: {
+      ev_revenue: number;
+      ev_ebitda: number;
+    };
+    recent_deals: {
+      acquirer: string;
+      target: string;
+      value: number;
+      ev_revenue: number;
+    }[];
+  };
+  news: NewsItem[];
+  filings?: {
+    type: string;
+    date: string;
+    url: string;
+    description?: string;
+  }[];
+  price_impact?: {
+    acquirer_change: number;
+    target_change: number;
+    announcement_date: string;
+  };
+}
+
 // Analytics event types
 export interface AnalyticsEvent {
   event: string;

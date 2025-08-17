@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, Suspense } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { Calendar, Filter, TrendingUp, ArrowRight, Clock, DollarSign, Building } from 'lucide-react'
 
@@ -129,11 +130,52 @@ const dealSizes = [
   { label: 'Mid-size Deals (<$1B)', min: 0, max: 1000000000 }
 ]
 
-export default function DealsPage() {
+function DealsPageContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  
   const [selectedIndustry, setSelectedIndustry] = useState('All')
   const [selectedStatus, setSelectedStatus] = useState('All')
   const [selectedSize, setSelectedSize] = useState(0)
   const [dateRange, setDateRange] = useState({ start: '', end: '' })
+  
+  // Initialize state from URL parameters
+  useEffect(() => {
+    if (searchParams) {
+      const industry = searchParams.get('industry')
+      const status = searchParams.get('status')
+      const size = searchParams.get('size')
+      const startDate = searchParams.get('startDate')
+      const endDate = searchParams.get('endDate')
+      
+      if (industry && industries.includes(industry)) setSelectedIndustry(industry)
+      if (status && statuses.includes(status)) setSelectedStatus(status)
+      if (size) setSelectedSize(Number(size))
+      if (startDate || endDate) {
+        setDateRange({
+          start: startDate || '',
+          end: endDate || ''
+        })
+      }
+    }
+  }, [searchParams])
+  
+  // Update URL when filters change
+  const updateUrl = (updates: Record<string, string | number>) => {
+    const params = new URLSearchParams(searchParams?.toString())
+    
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === '' || value === 'All' || value === 0) {
+        params.delete(key)
+      } else {
+        params.set(key, String(value))
+      }
+    })
+    
+    const newUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname
+    router.replace(newUrl)
+  }
 
   const filteredDeals = useMemo(() => {
     return mockDeals.filter(deal => {
@@ -168,6 +210,36 @@ export default function DealsPage() {
 
   const totalValue = filteredDeals.reduce((sum, deal) => sum + deal.value, 0)
   const avgDealSize = filteredDeals.length > 0 ? totalValue / filteredDeals.length : 0
+  
+  // Filter change handlers
+  const handleIndustryChange = (value: string) => {
+    setSelectedIndustry(value)
+    updateUrl({ industry: value })
+  }
+  
+  const handleStatusChange = (value: string) => {
+    setSelectedStatus(value)
+    updateUrl({ status: value })
+  }
+  
+  const handleSizeChange = (value: number) => {
+    setSelectedSize(value)
+    updateUrl({ size: value })
+  }
+  
+  const handleDateRangeChange = (type: 'start' | 'end', value: string) => {
+    const newDateRange = { ...dateRange, [type]: value }
+    setDateRange(newDateRange)
+    updateUrl({ startDate: newDateRange.start, endDate: newDateRange.end })
+  }
+  
+  const handleClearFilters = () => {
+    setSelectedIndustry('All')
+    setSelectedStatus('All')
+    setSelectedSize(0)
+    setDateRange({ start: '', end: '' })
+    router.replace(pathname)
+  }
 
   return (
     <DashboardLayout>
@@ -233,7 +305,7 @@ export default function DealsPage() {
             <select
               className="px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary"
               value={selectedIndustry}
-              onChange={(e) => setSelectedIndustry(e.target.value)}
+              onChange={(e) => handleIndustryChange(e.target.value)}
             >
               {industries.map(industry => (
                 <option key={industry} value={industry}>{industry}</option>
@@ -244,7 +316,7 @@ export default function DealsPage() {
             <select
               className="px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary"
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
+              onChange={(e) => handleStatusChange(e.target.value)}
             >
               {statuses.map(status => (
                 <option key={status} value={status}>{status}</option>
@@ -255,7 +327,7 @@ export default function DealsPage() {
             <select
               className="px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary"
               value={selectedSize}
-              onChange={(e) => setSelectedSize(Number(e.target.value))}
+              onChange={(e) => handleSizeChange(Number(e.target.value))}
             >
               {dealSizes.map((size, index) => (
                 <option key={index} value={index}>{size.label}</option>
@@ -268,7 +340,7 @@ export default function DealsPage() {
               placeholder="Start Date"
               className="px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary"
               value={dateRange.start}
-              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+              onChange={(e) => handleDateRangeChange('start', e.target.value)}
             />
 
             <input
@@ -276,18 +348,13 @@ export default function DealsPage() {
               placeholder="End Date"
               className="px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary"
               value={dateRange.end}
-              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+              onChange={(e) => handleDateRangeChange('end', e.target.value)}
             />
           </div>
           
           <div className="mt-4">
             <button
-              onClick={() => {
-                setSelectedIndustry('All')
-                setSelectedStatus('All')
-                setSelectedSize(0)
-                setDateRange({ start: '', end: '' })
-              }}
+              onClick={handleClearFilters}
               className="px-4 py-2 bg-terminal-border text-white rounded hover:bg-terminal-primary hover:text-black transition-colors font-mono text-sm"
             >
               CLEAR FILTERS
@@ -358,5 +425,24 @@ export default function DealsPage() {
         </div>
       </div>
     </DashboardLayout>
+  )
+}
+
+export default function DealsPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-terminal-primary font-mono">M&A DEALS</h1>
+              <p className="text-gray-400 text-sm mt-1">Loading...</p>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    }>
+      <DealsPageContent />
+    </Suspense>
   )
 }

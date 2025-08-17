@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import { useDebounce } from '@/hooks/useDebounce'
 import { 
   Settings as SettingsIcon,
   User,
@@ -23,10 +24,15 @@ import {
 } from 'lucide-react'
 
 export default function SettingsPage() {
-  // User Profile Settings
+// User Profile Settings
   const [userName, setUserName] = useState('Jane Doe')
   const [userEmail, setUserEmail] = useState('jane.doe@deallens.ai')
   const [userRole, setUserRole] = useState('Senior Analyst')
+  
+  // Create debounced setters for text inputs
+  const debouncedSetUserName = useDebounce(setUserName, 500)
+  const debouncedSetUserEmail = useDebounce(setUserEmail, 500)
+  const debouncedSetUserRole = useDebounce(setUserRole, 500)
 
   // Display Settings
   const [theme, setTheme] = useState('dark')
@@ -42,11 +48,14 @@ export default function SettingsPage() {
   const [earningsAlerts, setEarningsAlerts] = useState(false)
   const [systemAlerts, setSystemAlerts] = useState(true)
 
-  // API Settings
+// API Settings
   const [apiKey, setApiKey] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
   const [dataProvider, setDataProvider] = useState('bloomberg')
   const [autoSync, setAutoSync] = useState(true)
+  
+  // Create debounced setter for API key
+  const debouncedSetApiKey = useDebounce(setApiKey, 500)
 
   // Security Settings
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
@@ -60,11 +69,33 @@ export default function SettingsPage() {
 
   // Toast notifications
   const [showSaveToast, setShowSaveToast] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
-  const handleSave = () => {
-    // Simulate save operation
-    setShowSaveToast(true)
-    setTimeout(() => setShowSaveToast(false), 3000)
+  const handleSave = async () => {
+    setIsSaving(true)
+    setSaveError(null)
+    
+    try {
+      // Simulate save operation with potential error
+      await new Promise((resolve, reject) => {
+        setTimeout(() => {
+          if (Math.random() > 0.1) { // 90% success rate
+            resolve(true)
+          } else {
+            reject(new Error('Failed to save settings'))
+          }
+        }, 1000)
+      })
+      
+      setShowSaveToast(true)
+      setTimeout(() => setShowSaveToast(false), 3000)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'An error occurred')
+      setTimeout(() => setSaveError(null), 5000)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const SettingSection = ({ title, icon: Icon, children }: { 
@@ -81,69 +112,137 @@ export default function SettingsPage() {
     </div>
   )
 
-  const InputField = ({ label, value, onChange, type = 'text', placeholder = '' }: {
+type InputValue = string | number | boolean;
+
+  const InputField = <T extends InputValue>({ 
+    label, 
+    value, 
+    onChange, 
+    type = 'text', 
+    placeholder = '' 
+  }: {
     label: string,
-    value: string,
-    onChange: (value: string) => void,
+    value: T,
+    onChange: (value: T) => void,
     type?: string,
     placeholder?: string
-  }) => (
-    <div className="space-y-2">
-      <label className="block text-sm font-mono text-gray-300">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary focus:border-terminal-primary font-mono"
-      />
-    </div>
-  )
+  }) => {
+    const handleChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newValue = e.target.value;
+        
+        // Convert the value to the appropriate type
+        let typedValue: T;
+        if (typeof value === 'number') {
+          typedValue = Number(newValue) as T;
+        } else if (typeof value === 'boolean') {
+          typedValue = (newValue === 'true') as unknown as T;
+        } else {
+          typedValue = newValue as T;
+        }
+        
+        onChange(typedValue);
+      },
+      [onChange, value]
+    );
+    
+    return (
+      <div className="space-y-2">
+        <label className="block text-sm font-mono text-gray-300">{label}</label>
+        <input
+          type={type}
+          value={String(value)}
+          onChange={handleChange}
+          onBlur={() => {}} // Prevent submit on blur
+          placeholder={placeholder}
+          className="w-full px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary focus:border-terminal-primary font-mono"
+        />
+      </div>
+    );
+  }
 
-  const SelectField = ({ label, value, onChange, options }: {
+const SelectField = <T extends string | number>({ 
+    label, 
+    value, 
+    onChange, 
+    options 
+  }: {
     label: string,
-    value: string,
-    onChange: (value: string) => void,
-    options: { value: string, label: string }[]
-  }) => (
-    <div className="space-y-2">
-      <label className="block text-sm font-mono text-gray-300">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary font-mono"
-      >
-        {options.map(option => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </div>
-  )
+    value: T,
+    onChange: (value: T) => void,
+    options: { value: T, label: string }[]
+  }) => {
+    const handleChange = useCallback(
+      (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newValue = e.target.value;
+        
+        // Convert the value to the appropriate type
+        let typedValue: T;
+        if (typeof value === 'number') {
+          typedValue = Number(newValue) as T;
+        } else {
+          typedValue = newValue as T;
+        }
+        
+        onChange(typedValue);
+      },
+      [onChange, value]
+    );
+    
+    return (
+      <div className="space-y-2">
+        <label className="block text-sm font-mono text-gray-300">{label}</label>
+        <select
+          value={String(value)}
+          onChange={handleChange}
+          className="w-full px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary font-mono"
+        >
+          {options.map(option => (
+            <option key={String(option.value)} value={String(option.value)}>{option.label}</option>
+          ))}
+        </select>
+      </div>
+    );
+  }
 
-  const ToggleField = ({ label, value, onChange, description }: {
+const ToggleField = ({ 
+    label, 
+    value, 
+    onChange, 
+    description 
+  }: {
     label: string,
     value: boolean,
     onChange: (value: boolean) => void,
     description?: string
-  }) => (
-    <div className="flex items-center justify-between py-2">
-      <div>
-        <div className="text-sm font-mono text-white">{label}</div>
-        {description && (
-          <div className="text-xs text-gray-400 mt-1">{description}</div>
-        )}
+  }) => {
+    const handleChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        onChange(e.target.checked);
+      },
+      [onChange]
+    );
+    
+    return (
+      <div className="flex items-center justify-between py-2">
+        <div>
+          <div className="text-sm font-mono text-white">{label}</div>
+          {description && (
+            <div className="text-xs text-gray-400 mt-1">{description}</div>
+          )}
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={value}
+            onChange={handleChange}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-terminal-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-terminal-primary"></div>
+        </label>
       </div>
-      <label className="relative inline-flex items-center cursor-pointer">
-        <input
-          type="checkbox"
-          checked={value}
-          onChange={(e) => onChange(e.target.checked)}
-          className="sr-only peer"
-        />
-        <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-terminal-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-terminal-primary"></div>
-      </label>
-    </div>
-  )
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -156,19 +255,33 @@ export default function SettingsPage() {
           </div>
           
           <button
+            type="button"
             onClick={handleSave}
-            className="flex items-center space-x-2 px-6 py-2 bg-terminal-primary text-black rounded hover:bg-yellow-600 transition-colors font-mono"
+            disabled={isSaving}
+            className="flex items-center space-x-2 px-6 py-2 bg-terminal-primary text-black rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-mono"
           >
-            <Save className="h-4 w-4" />
-            <span>SAVE CHANGES</span>
+            <Save className={`h-4 w-4 ${isSaving ? 'animate-spin' : ''}`} />
+            <span>{isSaving ? 'SAVING...' : 'SAVE CHANGES'}</span>
           </button>
         </div>
 
         {/* Save Toast */}
+        <div aria-live="polite" aria-atomic="true" className="sr-only">
+          {showSaveToast && "Settings saved successfully"}
+          {saveError && `Error: ${saveError}`}
+        </div>
+        
         {showSaveToast && (
           <div className="fixed top-4 right-4 bg-terminal-green text-black px-4 py-2 rounded-lg font-mono text-sm flex items-center space-x-2 z-50">
             <Check className="h-4 w-4" />
             <span>Settings saved successfully</span>
+          </div>
+        )}
+        
+        {saveError && (
+          <div className="fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg font-mono text-sm flex items-center space-x-2 z-50">
+            <X className="h-4 w-4" />
+            <span>{saveError}</span>
           </div>
         )}
 
@@ -179,18 +292,18 @@ export default function SettingsPage() {
               <InputField
                 label="Full Name"
                 value={userName}
-                onChange={setUserName}
+                onChange={debouncedSetUserName}
               />
               <InputField
                 label="Email Address"
                 value={userEmail}
-                onChange={setUserEmail}
+                onChange={debouncedSetUserEmail}
                 type="email"
               />
               <InputField
                 label="Role"
                 value={userRole}
-                onChange={setUserRole}
+                onChange={debouncedSetUserRole}
               />
             </div>
           </SettingSection>
@@ -292,6 +405,7 @@ export default function SettingsPage() {
                     type={showApiKey ? 'text' : 'password'}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
+                    onBlur={(e) => debouncedSetApiKey(e.target.value)}
                     placeholder="Enter your API key..."
                     className="w-full px-4 py-2 pr-12 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary focus:border-terminal-primary font-mono"
                   />
@@ -402,7 +516,11 @@ export default function SettingsPage() {
                 <div className="text-white font-mono">Clear All Data</div>
                 <div className="text-gray-400 text-sm">Remove all stored alerts, preferences, and cached data</div>
               </div>
-              <button className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors font-mono text-sm">
+              <button 
+                type="button"
+                onClick={() => confirm('Are you sure you want to clear all data? This action cannot be undone.')}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors font-mono text-sm"
+              >
                 CLEAR DATA
               </button>
             </div>
@@ -412,7 +530,11 @@ export default function SettingsPage() {
                   <div className="text-white font-mono">Delete Account</div>
                   <div className="text-gray-400 text-sm">Permanently delete your account and all associated data</div>
                 </div>
-                <button className="px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 transition-colors font-mono text-sm">
+                <button 
+                  type="button"
+                  onClick={() => confirm('Are you sure you want to delete your account? This action cannot be undone.')}
+                  className="px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 transition-colors font-mono text-sm"
+                >
                   DELETE ACCOUNT
                 </button>
               </div>

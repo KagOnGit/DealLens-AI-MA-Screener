@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { CompanyHoverCard } from '../companies/CompanyHoverCard'
+import { CompanySparkline } from '../charts'
 
 export function TopCompanies() {
   const [currentTime, setCurrentTime] = useState<string>('--:--:--')
@@ -39,6 +40,7 @@ export function TopCompanies() {
               <th className="text-left py-2 px-3">NAME</th>
               <th className="text-right py-2 px-3">PRICE</th>
               <th className="text-right py-2 px-3">CHANGE</th>
+              <th className="text-center py-2 px-3">TREND</th>
               <th className="text-right py-2 px-3">MKT CAP</th>
               <th className="text-left py-2 px-3">SECTOR</th>
             </tr>
@@ -65,6 +67,9 @@ export function TopCompanies() {
                 }`}>
                   {company.change >= 0 ? '+' : ''}{company.change.toFixed(2)}
                 </td>
+                <td className="py-2 px-3 flex justify-center items-center">
+                  <CompanySparkline ticker={company.ticker} className="opacity-80" />
+                </td>
                 <td className="py-2 px-3 text-right text-white">${company.marketCap}</td>
                 <td className="py-2 px-3 text-gray-400">{company.sector}</td>
               </tr>
@@ -73,11 +78,19 @@ export function TopCompanies() {
         </table>
       </div>
       
-      <div className="mt-4 pt-4 border-t border-terminal-border text-xs text-terminal-primary">
-        <div className="flex justify-between">
-          <span>Total Market Cap: $10.85T</span>
-          <span>Avg P/E: 24.7</span>
-          <span>Updated: {currentTime}</span>
+      <div className="mt-4 pt-4 border-t border-terminal-border">
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-terminal-primary flex space-x-6">
+            <span>Total Market Cap: $10.85T</span>
+            <span>Avg P/E: 24.7</span>
+            <span>Updated: {currentTime}</span>
+          </div>
+          <Link 
+            href="/companies?sector=All&marketCap=0&sort=marketCap&order=desc"
+            className="px-4 py-2 bg-terminal-primary text-black rounded hover:bg-yellow-600 transition-colors font-mono text-xs font-bold"
+          >
+            VIEW ALL COMPANIES
+          </Link>
         </div>
       </div>
     </div>

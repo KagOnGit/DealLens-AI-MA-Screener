@@ -1,4 +1,18 @@
+'use client'
+
+import Link from 'next/link'
+import { LineChart } from '../charts'
+import { getDealsStats } from '@/lib/api'
+import { useQuery } from '@tanstack/react-query'
+
 export function DealActivity() {
+  // Fetch deals statistics
+  const { data: dealsStats } = useQuery({
+    queryKey: ['deals-stats'],
+    queryFn: () => getDealsStats(),
+    staleTime: 10 * 60 * 1000, // 10 minutes
+  });
+
   const recentDeals = [
     {
       id: '1',
@@ -58,20 +72,53 @@ export function DealActivity() {
         ))}
       </div>
       
+      {/* Deals Per Month Chart */}
+      {dealsStats && (
+        <div className="mt-4 pt-4 border-t border-terminal-border">
+          <h3 className="text-terminal-primary font-mono text-sm mb-3">DEALS PER MONTH (12M)</h3>
+          <div className="h-24">
+            <LineChart
+              data={dealsStats.deals_by_month.slice(-12).map(item => ({
+                month: new Date(item.date).toLocaleDateString('en-US', { month: 'short' }),
+                count: item.count
+              }))}
+              lines={[{ key: 'count', name: 'Deals', color: '#FFD700' }]}
+              height={96}
+              xAxisKey="month"
+              showGrid={false}
+              showLegend={false}
+              showTooltip={true}
+              formatTooltipValue={(value, name) => [`${value} deals`, name]}
+              margin={{ top: 5, right: 10, left: 10, bottom: 20 }}
+              strokeWidth={2}
+              aria-label="Monthly deal activity trend over last 12 months"
+            />
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 pt-4 border-t border-terminal-border">
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <div className="text-terminal-primary text-xl font-mono">12</div>
-            <div className="text-xs text-gray-400">This Week</div>
+        <div className="flex items-center justify-between">
+          <div className="grid grid-cols-3 gap-4 text-center flex-1">
+            <div>
+              <div className="text-terminal-primary text-xl font-mono">12</div>
+              <div className="text-xs text-gray-400">This Week</div>
+            </div>
+            <div>
+              <div className="text-terminal-green text-xl font-mono">$45.2B</div>
+              <div className="text-xs text-gray-400">Total Value</div>
+            </div>
+            <div>
+              <div className="text-terminal-primary text-xl font-mono">8</div>
+              <div className="text-xs text-gray-400">Completed</div>
+            </div>
           </div>
-          <div>
-            <div className="text-terminal-green text-xl font-mono">$45.2B</div>
-            <div className="text-xs text-gray-400">Total Value</div>
-          </div>
-          <div>
-            <div className="text-terminal-primary text-xl font-mono">8</div>
-            <div className="text-xs text-gray-400">Completed</div>
-          </div>
+          <Link 
+            href="/deals?industry=All&status=All&size=0"
+            className="ml-6 px-4 py-2 bg-terminal-primary text-black rounded hover:bg-yellow-600 transition-colors font-mono text-xs font-bold whitespace-nowrap"
+          >
+            VIEW ALL DEALS
+          </Link>
         </div>
       </div>
     </div>

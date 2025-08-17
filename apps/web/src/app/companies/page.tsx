@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, Suspense } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { Search, ArrowUpDown, TrendingUp, TrendingDown } from 'lucide-react'
 
@@ -115,7 +116,11 @@ const marketCapRanges = [
 type SortField = 'ticker' | 'name' | 'price' | 'change' | 'marketCap'
 type SortOrder = 'asc' | 'desc'
 
-export default function CompaniesPage() {
+function CompaniesPageContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedSector, setSelectedSector] = useState('All')
   const [selectedMarketCap, setSelectedMarketCap] = useState(0)
@@ -123,6 +128,41 @@ export default function CompaniesPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
+  
+  // Initialize state from URL parameters
+  useEffect(() => {
+    if (searchParams) {
+      const sector = searchParams.get('sector')
+      const marketCap = searchParams.get('marketCap')
+      const sort = searchParams.get('sort')
+      const order = searchParams.get('order')
+      const search = searchParams.get('search')
+      const page = searchParams.get('page')
+      
+      if (sector && sectors.includes(sector)) setSelectedSector(sector)
+      if (marketCap) setSelectedMarketCap(Number(marketCap))
+      if (sort && ['ticker', 'name', 'price', 'change', 'marketCap'].includes(sort)) setSortField(sort as SortField)
+      if (order && ['asc', 'desc'].includes(order)) setSortOrder(order as SortOrder)
+      if (search) setSearchTerm(search)
+      if (page) setCurrentPage(Number(page))
+    }
+  }, [searchParams])
+  
+  // Update URL when filters change
+  const updateUrl = (updates: Record<string, string | number>) => {
+    const params = new URLSearchParams(searchParams?.toString())
+    
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === '' || value === 'All' || value === 0) {
+        params.delete(key)
+      } else {
+        params.set(key, String(value))
+      }
+    })
+    
+    const newUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname
+    router.replace(newUrl)
+  }
 
   const filteredAndSortedCompanies = useMemo(() => {
     const filtered = mockCompanies.filter(company => {
@@ -165,12 +205,37 @@ export default function CompaniesPage() {
   const totalPages = Math.ceil(filteredAndSortedCompanies.length / itemsPerPage)
 
   const handleSort = (field: SortField) => {
-    if (field === sortField) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortOrder('desc')
-    }
+    const newOrder = field === sortField ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'desc'
+    setSortField(field)
+    setSortOrder(newOrder)
+    updateUrl({ sort: field, order: newOrder })
+  }
+  
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value)
+    setCurrentPage(1)
+    updateUrl({ search: value, page: 1 })
+  }
+  
+  const handleSectorChange = (value: string) => {
+    setSelectedSector(value)
+    setCurrentPage(1)
+    updateUrl({ sector: value, page: 1 })
+  }
+  
+  const handleMarketCapChange = (value: number) => {
+    setSelectedMarketCap(value)
+    setCurrentPage(1)
+    updateUrl({ marketCap: value, page: 1 })
+  }
+  
+  const handleClearFilters = () => {
+    setSearchTerm('')
+    setSelectedSector('All')
+    setSelectedMarketCap(0)
+    setCurrentPage(1)
+    updateUrl({})
+    router.replace(pathname)
   }
 
   const formatMarketCap = (value: number) => {
@@ -204,7 +269,7 @@ export default function CompaniesPage() {
                 placeholder="Search by ticker or name..."
                 className="w-full pl-10 pr-4 py-2 bg-black border border-terminal-border rounded text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-terminal-primary"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
               />
             </div>
 
@@ -212,7 +277,7 @@ export default function CompaniesPage() {
             <select
               className="px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary"
               value={selectedSector}
-              onChange={(e) => setSelectedSector(e.target.value)}
+              onChange={(e) => handleSectorChange(e.target.value)}
             >
               {sectors.map(sector => (
                 <option key={sector} value={sector}>{sector}</option>
@@ -223,7 +288,7 @@ export default function CompaniesPage() {
             <select
               className="px-4 py-2 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary"
               value={selectedMarketCap}
-              onChange={(e) => setSelectedMarketCap(Number(e.target.value))}
+              onChange={(e) => handleMarketCapChange(Number(e.target.value))}
             >
               {marketCapRanges.map((range, index) => (
                 <option key={index} value={index}>{range.label}</option>
@@ -232,12 +297,7 @@ export default function CompaniesPage() {
 
             {/* Clear Filters */}
             <button
-              onClick={() => {
-                setSearchTerm('')
-                setSelectedSector('All')
-                setSelectedMarketCap(0)
-                setCurrentPage(1)
-              }}
+              onClick={handleClearFilters}
               className="px-4 py-2 bg-terminal-border text-white rounded hover:bg-terminal-primary hover:text-black transition-colors font-mono text-sm"
             >
               CLEAR FILTERS
@@ -348,5 +408,24 @@ export default function CompaniesPage() {
         </div>
       </div>
     </DashboardLayout>
+  )
+}
+
+export default function CompaniesPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-terminal-primary font-mono">COMPANIES</h1>
+              <p className="text-gray-400 text-sm mt-1">Loading...</p>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    }>
+      <CompaniesPageContent />
+    </Suspense>
   )
 }
