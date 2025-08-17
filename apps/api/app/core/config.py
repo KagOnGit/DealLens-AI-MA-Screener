@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # Auth
     JWT_SECRET: str = Field(default=os.getenv("JWT_SECRET", "change-me-please-32-chars-min"))
 
+    # CORS
+    ALLOWED_ORIGINS: str = Field(default=os.getenv("ALLOWED_ORIGINS", "https://web-50wp4c4h2-aditya-sighs-projects.vercel.app"))
+
     # External APIs
     NEWSAPI_KEY: str = Field(default=os.getenv("NEWSAPI_KEY", ""))
     ALPHAVANTAGE_KEY: str = Field(default=os.getenv("ALPHAVANTAGE_KEY", ""))

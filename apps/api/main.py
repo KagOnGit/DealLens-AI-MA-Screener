@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
-import os
+from app.core.config import settings
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -20,15 +20,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# Configure CORS - Allow all origins for now (TODO: restrict in production)
-logger.info(f"FRONTEND_ORIGIN: {os.getenv('FRONTEND_ORIGIN', 'not set')}")
-allowed_origins = ["*"]  # Temporarily allow all origins
+# Configure CORS with proper settings
+origins = settings.ALLOWED_ORIGINS.split(",")
+logger.info(f"CORS allowed origins: {origins}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_origins=origins,
+    allow_credentials=False,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -40,6 +40,10 @@ except Exception as e:
     logger.error("Router include failed: %s", e)
 
 # Health endpoints
+@app.get("/status")
+async def api_status():
+    return {"status": "ok", "service": "api"}
+
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}

@@ -1,0 +1,10 @@
+name: Health Check
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS https://deallens-ai-ma-screener-production.up.railway.app/status
+      - run: curl -fsS https://web-50wp4c4h2-aditya-sighs-projects.vercel.app
