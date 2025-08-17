@@ -1,6 +1,8 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import os
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -17,6 +19,22 @@ async def lifespan(app: FastAPI):
     # optional cleanup
 
 app = FastAPI(lifespan=lifespan)
+
+# Configure CORS
+frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+allowed_origins = [
+    frontend_origin,
+    "http://localhost:3000",
+    "https://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 # Routers
 try:
