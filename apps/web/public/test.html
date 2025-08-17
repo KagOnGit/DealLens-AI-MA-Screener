@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DealLens Web App - Test</title>
+</head>
+<body>
+    <h1>DealLens Web Application</h1>
+    <p>Status: <span style="color: green;">✅ Accessible</span></p>
+    <p>Build: <span id="build-time"></span></p>
+    
+    <h2>API Test</h2>
+    <button onclick="testAPI()">Test Local API</button>
+    <div id="api-result"></div>
+    
+    <script>
+        document.getElementById('build-time').textContent = new Date().toISOString();
+        
+        async function testAPI() {
+            const result = document.getElementById('api-result');
+            try {
+                // Test the debug endpoint we implemented
+                const response = await fetch('/api/debug/health');
+                const data = await response.json();
+                result.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                result.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

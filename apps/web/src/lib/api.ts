@@ -1,7 +1,152 @@
+import { useApiStatusStore } from './api-status-store';
+import { logger } from './logger';
+import toast from 'react-hot-toast';
+
+// Environment configuration with guardrails
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-if (!process.env.NEXT_PUBLIC_API_URL && typeof window !== 'undefined') {
-  console.warn('NEXT_PUBLIC_API_URL is not configured. Using default localhost.');
+// Get mock mode from store (will be reactive)
+const getUseMocks = (): boolean => {
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_USE_MOCKS !== 'false';
+  }
+  return useApiStatusStore.getState().usingMocks;
+};
+
+// Retry configuration
+const RETRY_DELAYS = [200, 500, 1000, 2000]; // ms
+const REQUEST_TIMEOUT = 5000; // 5 seconds
+
+/**
+ * Sleep function for retry delays
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Generate a unique request ID for tracking
+ */
+function generateRequestId(): string {
+  return Math.random().toString(36).substring(2, 15);
+}
+
+/**
+ * Retry function with exponential backoff
+ */
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  endpoint: string,
+  requestId: string
+): Promise<T> {
+  const store = useApiStatusStore.getState();
+  
+  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+    try {
+      const result = await operation();
+      
+      // Success: reset error counts and set status to ok
+      if (attempt > 0) {
+        store.resetCounts();
+        store.setStatus('ok');
+        logger.debug(`Request succeeded after ${attempt} retries`, { endpoint, requestId });
+      }
+      
+      return result;
+    } catch (error) {
+      const isLastAttempt = attempt === RETRY_DELAYS.length;
+      
+      if (isLastAttempt) {
+        // Final failure
+        store.incrementErrorCount();
+        const errorCount = store.errorCount;
+        
+        logger.error(`Request failed after ${attempt} retries`, error, {
+          endpoint,
+          requestId,
+          errorCount
+        });
+        
+        // Update status based on error pattern
+        if (errorCount >= 3) {
+          store.setStatus('down');
+          // Show toast for critical failures only when not using mocks
+          if (!store.usingMocks && typeof window !== 'undefined') {
+            toast.error('Having trouble contacting the API. We\'ll keep retrying in the background.', {
+              id: 'api-down-toast', // Prevent duplicate toasts
+              duration: 6000,
+            });
+          }
+        } else {
+          store.setStatus('degraded');
+          // Show a lighter warning for degraded service
+          if (!store.usingMocks && typeof window !== 'undefined') {
+            toast('API connection issues detected. Some features may be limited.', {
+              id: 'api-degraded-toast',
+              icon: '⚠️',
+              duration: 4000,
+            });
+          }
+        }
+        
+        throw error;
+      } else {
+        // Retry with backoff
+        store.incrementRetryCount();
+        const delay = RETRY_DELAYS[attempt];
+        
+        logger.debug(`Retrying request in ${delay}ms`, {
+          endpoint,
+          requestId,
+          attempt: attempt + 1,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        
+        await sleep(delay);
+      }
+    }
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+
+// Environment warnings
+if (typeof window !== 'undefined') {
+  // Only run these checks on client-side
+  if (!process.env.NEXT_PUBLIC_API_URL) {
+    console.warn('⚠️ NEXT_PUBLIC_API_URL is not configured. Using default localhost:8000');
+    console.warn('Set NEXT_PUBLIC_API_URL in your environment variables for production.');
+  }
+  
+  // Health check on initialization
+  setTimeout(async () => {
+    const store = useApiStatusStore.getState();
+    const requestId = generateRequestId();
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/healthz`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT)
+      });
+      
+      if (!response.ok) {
+        console.error(`❌ API health check failed: ${response.status} ${response.statusText}`);
+        console.error('Check your NEXT_PUBLIC_API_URL configuration and ensure the API server is running.');
+        store.setStatus('degraded');
+      } else {
+        console.info(`✅ API health check passed: ${API_BASE_URL}`);
+        store.setStatus('ok');
+        store.resetCounts();
+      }
+    } catch (error) {
+      console.error(`❌ API health check failed:`, error);
+      console.error('Ensure the API server is running and accessible.');
+      store.setStatus('down');
+    } finally {
+      store.updateLastChecked();
+    }
+  }, 1000);
 }
 
 export class ApiClient {
@@ -12,43 +157,76 @@ export class ApiClient {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    try {
+    const requestId = generateRequestId();
+    const store = useApiStatusStore.getState();
+    
+    return withRetry(async () => {
       const url = `${this.baseUrl}${endpoint}`;
-      const response = await fetch(url, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-        ...options,
-      });
-
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+      
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Request-ID': requestId,
+            ...options.headers,
+          },
+          signal: controller.signal,
+          ...options,
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        }
+        
+        store.updateLastChecked();
+        return response.json();
+      } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
       }
-
-      return response.json();
-    } catch (error) {
-      console.error(`API request to ${endpoint} failed:`, error);
-      throw error;
-    }
+    }, endpoint, requestId);
   }
 
   async healthCheck(): Promise<{ status: string; timestamp?: string }> {
-    try {
-      const response = await fetch(`${this.baseUrl}/healthz`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
+    const requestId = generateRequestId();
+    const store = useApiStatusStore.getState();
+    
+    return withRetry(async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
       
-      if (response.ok) {
-        return await response.json();
-      } else {
-        throw new Error(`Health check failed: ${response.status}`);
+      try {
+        const response = await fetch(`${this.baseUrl}/healthz`, {
+          method: 'GET',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Request-ID': requestId
+          },
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          const result = await response.json();
+          store.setStatus('ok');
+          store.updateLastChecked();
+          return result;
+        } else {
+          throw new Error(`Health check failed: ${response.status}`);
+        }
+      } catch (error) {
+        clearTimeout(timeoutId);
+        store.setStatus('down');
+        throw error;
       }
-    } catch (error) {
-      console.error('Health check failed:', error);
-      throw error;
-    }
+    }, '/healthz', requestId);
   }
 
   async get<T>(endpoint: string): Promise<T> {
@@ -95,6 +273,48 @@ import {
 } from '../types';
 import { useQuery } from '@tanstack/react-query';
 
+// Graceful failure helper
+async function handleApiRequest<T>(
+  apiCall: () => Promise<T>,
+  mockFallback: () => T,
+  endpoint: string
+): Promise<T> {
+  const store = useApiStatusStore.getState();
+  
+  // If using mocks, return mock data immediately
+  if (store.usingMocks) {
+    logger.debug('Using mock data', { endpoint });
+    return mockFallback();
+  }
+  
+  // Try real API
+  try {
+    const result = await apiCall();
+    // Success - ensure status is ok if it was degraded
+    if (store.status === 'degraded') {
+      store.setStatus('ok');
+    }
+    return result;
+  } catch (error) {
+    logger.warn('API request failed, checking fallback strategy', { endpoint, error });
+    
+    // If we're not using mocks but API failed, 
+    // we can gracefully degrade to mock data for some endpoints
+    const canUseMockFallback = endpoint.includes('/alerts') || 
+                              endpoint.includes('/companies') || 
+                              endpoint.includes('/deals');
+    
+    if (canUseMockFallback) {
+      store.setStatus('degraded');
+      logger.debug('Falling back to mock data due to API failure', { endpoint });
+      return mockFallback();
+    } else {
+      // For critical endpoints, re-throw the error
+      throw error;
+    }
+  }
+}
+
 // Alerts API
 export async function getAlerts({
   unread,
@@ -103,15 +323,25 @@ export async function getAlerts({
   unread?: boolean;
   limit?: number;
 } = {}): Promise<AlertsResponse> {
-  const params = new URLSearchParams();
-  if (unread !== undefined) params.append('unread', unread.toString());
-  if (limit) params.append('limit', limit.toString());
-  
-  return apiClient.get<AlertsResponse>(`/api/v1/alerts?${params.toString()}`);
+  return handleApiRequest(
+    async () => {
+      const params = new URLSearchParams();
+      if (unread !== undefined) params.append('unread', unread.toString());
+      if (limit) params.append('limit', limit.toString());
+      return await apiClient.get<AlertsResponse>(`/api/v1/alerts?${params.toString()}`);
+    },
+    () => ({ alerts: [], total: 0, unread_count: 0 }),
+    '/api/v1/alerts'
+  );
 }
 
 export async function getAlert(id: string): Promise<Alert> {
-  return apiClient.get<Alert>(`/api/v1/alerts/${id}`);
+  try {
+    return await apiClient.get<Alert>(`/api/v1/alerts/${id}`);
+  } catch (error) {
+    console.warn('Alert API failed:', error);
+    throw error; // Re-throw since this is for specific alerts
+  }
 }
 
 // Mock data for alert details
@@ -267,16 +497,26 @@ export async function markAlertRead(id: string): Promise<{ message: string }> {
   return apiClient.put<{ message: string }>(`/api/v1/alerts/${id}/read`);
 }
 
-// Deals API
+// Legacy Deals API - keeping for backward compatibility
 export async function getRecentDeals(limit = 10): Promise<DealsResponse> {
-  return apiClient.get<DealsResponse>(`/api/v1/deals?limit=${limit}&sort=announced_at`);
+  try {
+    return await apiClient.get<DealsResponse>(`/api/v1/deals?limit=${limit}&sort=announced_at`);
+  } catch (error) {
+    console.warn('Recent deals API failed, using empty response:', error);
+    return { deals: [], total: 0, page: 1, limit };
+  }
 }
 
 export async function getDeal(id: string): Promise<Deal> {
-  return apiClient.get<Deal>(`/api/v1/deals/${id}`);
+  try {
+    return await apiClient.get<Deal>(`/api/v1/deals/${id}`);
+  } catch (error) {
+    console.warn('Deal API failed:', error);
+    throw error; // Re-throw since this is for specific deals
+  }
 }
 
-export async function getDeals({
+export async function getDealsLegacy({
   page = 1,
   limit = 20,
   status,
@@ -285,12 +525,17 @@ export async function getDeals({
   limit?: number;
   status?: string;
 } = {}): Promise<DealsResponse> {
-  const params = new URLSearchParams();
-  params.append('page', page.toString());
-  params.append('limit', limit.toString());
-  if (status) params.append('status', status);
-  
-  return apiClient.get<DealsResponse>(`/api/v1/deals?${params.toString()}`);
+  try {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (status) params.append('status', status);
+    
+    return await apiClient.get<DealsResponse>(`/api/v1/deals?${params.toString()}`);
+  } catch (error) {
+    console.warn('Deals legacy API failed, using empty response:', error);
+    return { deals: [], total: 0, page, limit };
+  }
 }
 
 // Companies API
@@ -303,12 +548,25 @@ export async function getCompanies({
   page?: number;
   limit?: number;
 } = {}): Promise<CompaniesResponse> {
-  const params = new URLSearchParams();
-  params.append('page', page.toString());
-  params.append('limit', limit.toString());
-  if (q) params.append('q', q);
-  
-  return apiClient.get<CompaniesResponse>(`/api/v1/companies?${params.toString()}`);
+  return handleApiRequest(
+    async () => {
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      params.append('limit', limit.toString());
+      if (q) params.append('q', q);
+      return await apiClient.get<CompaniesResponse>(`/api/v1/companies?${params.toString()}`);
+    },
+    () => {
+      const mockCompanies = Object.values(mockCompanyDetails).slice(0, limit);
+      return {
+        companies: mockCompanies,
+        total: mockCompanies.length,
+        page,
+        limit
+      };
+    },
+    '/api/v1/companies'
+  );
 }
 
 // Mock company data for major companies
@@ -468,26 +726,34 @@ const mockCompanyDetails: Record<string, Company> = {
 }
 
 export async function getCompany(ticker: string): Promise<Company> {
-  try {
-    return await apiClient.get<Company>(`/api/v1/companies/${ticker.toUpperCase()}`);
-  } catch (error) {
-    console.warn('API failed, using mock data:', error);
-    const mockCompany = mockCompanyDetails[ticker.toUpperCase()];
-    if (!mockCompany) {
-      throw new Error(`Company ${ticker} not found`);
-    }
-    return mockCompany;
-  }
+  return handleApiRequest(
+    async () => {
+      return await apiClient.get<Company>(`/api/v1/companies/${ticker.toUpperCase()}`);
+    },
+    () => {
+      const mockCompany = mockCompanyDetails[ticker.toUpperCase()];
+      if (!mockCompany) {
+        throw new Error(`Company ${ticker} not found`);
+      }
+      return mockCompany;
+    },
+    `/api/v1/companies/${ticker.toUpperCase()}`
+  );
 }
 
 // Search API
 export async function searchSuggestions(q: string): Promise<Suggestion[]> {
   if (!q.trim()) return [];
   
-  const response = await apiClient.get<SuggestionsResponse>(
-    `/api/v1/search?q=${encodeURIComponent(q.trim())}`
-  );
-  return response.suggestions;
+  try {
+    const response = await apiClient.get<SuggestionsResponse>(
+      `/api/v1/search?q=${encodeURIComponent(q.trim())}`
+    );
+    return response.suggestions;
+  } catch (error) {
+    console.warn('Search API failed, using empty results:', error);
+    return [];
+  }
 }
 
 // Dashboard API
@@ -926,6 +1192,10 @@ export async function getCompanyDetail(ticker: string): Promise<CompanyDetail> {
 }
 
 export async function getCompanyTimeseries(ticker: string): Promise<CompanyTimeseries> {
+  if (!ticker || ticker === 'undefined' || ticker === 'UNDEFINED') {
+    throw new Error('Invalid ticker provided');
+  }
+  
   try {
     return await apiClient.get<CompanyTimeseries>(`/api/v1/companies/${ticker.toUpperCase()}/timeseries`);
   } catch (error) {
@@ -939,6 +1209,10 @@ export async function getCompanyTimeseries(ticker: string): Promise<CompanyTimes
 }
 
 export async function getCompanyOwnership(ticker: string): Promise<CompanyOwnership> {
+  if (!ticker || ticker === 'undefined' || ticker === 'UNDEFINED') {
+    throw new Error('Invalid ticker provided');
+  }
+  
   try {
     return await apiClient.get<CompanyOwnership>(`/api/v1/companies/${ticker.toUpperCase()}/ownership`);
   } catch (error) {
@@ -952,6 +1226,10 @@ export async function getCompanyOwnership(ticker: string): Promise<CompanyOwners
 }
 
 export async function getCompanyNews(ticker: string): Promise<CompanyNews[]> {
+  if (!ticker || ticker === 'undefined' || ticker === 'UNDEFINED') {
+    return [];
+  }
+  
   try {
     return await apiClient.get<CompanyNews[]>(`/api/v1/companies/${ticker.toUpperCase()}/news`);
   } catch (error) {
@@ -970,7 +1248,7 @@ export function useCompanyDetail(ticker: string) {
     queryKey: ['company-detail', ticker],
     queryFn: () => getCompanyDetail(ticker),
     staleTime: 5 * 60 * 1000, // 5 minutes
-    enabled: !!ticker
+    enabled: !!ticker && ticker !== 'undefined' && ticker !== 'UNDEFINED' && ticker.length > 0
   });
 }
 
@@ -979,7 +1257,7 @@ export function useCompanyTimeseries(ticker: string) {
     queryKey: ['company-timeseries', ticker],
     queryFn: () => getCompanyTimeseries(ticker),
     staleTime: 10 * 60 * 1000, // 10 minutes
-    enabled: !!ticker
+    enabled: !!ticker && ticker !== 'undefined' && ticker !== 'UNDEFINED' && ticker.length > 0
   });
 }
 
@@ -988,7 +1266,7 @@ export function useCompanyOwnership(ticker: string) {
     queryKey: ['company-ownership', ticker],
     queryFn: () => getCompanyOwnership(ticker),
     staleTime: 30 * 60 * 1000, // 30 minutes
-    enabled: !!ticker
+    enabled: !!ticker && ticker !== 'undefined' && ticker !== 'UNDEFINED' && ticker.length > 0
   });
 }
 
@@ -997,7 +1275,7 @@ export function useCompanyNews(ticker: string) {
     queryKey: ['company-news', ticker],
     queryFn: () => getCompanyNews(ticker),
     staleTime: 2 * 60 * 1000, // 2 minutes
-    enabled: !!ticker
+    enabled: !!ticker && ticker !== 'undefined' && ticker !== 'UNDEFINED' && ticker.length > 0
   });
 }
 
@@ -1146,15 +1424,15 @@ export function useDealDetail(dealId: string, options?: { enabled?: boolean }) {
   });
 }
 
-// Deals Statistics API
-export interface DealsStats {
+// Legacy Deals Statistics API - replaced by DealsStats interface below
+interface LegacyDealsStats {
   deals_by_month: { date: string; count: number; value: number }[];
   deals_by_industry: { industry: string; count: number; value: number }[];
   deals_by_size: { size_bucket: string; count: number; value: number }[];
 }
 
-// Generate mock deals statistics
-function generateDealsStats(): DealsStats {
+// Generate mock deals statistics (legacy)
+function generateLegacyDealsStats(): LegacyDealsStats {
   const now = new Date();
   
   // Generate monthly data for last 24 months
@@ -1194,13 +1472,13 @@ function generateDealsStats(): DealsStats {
   return { deals_by_month, deals_by_industry, deals_by_size };
 }
 
-export async function getDealsStats(filters?: {
+export async function getDealsStatsLegacy(filters?: {
   industry?: string;
   status?: string;
   size?: number;
   startDate?: string;
   endDate?: string;
-}): Promise<DealsStats> {
+}): Promise<LegacyDealsStats> {
   try {
     const params = new URLSearchParams();
     if (filters?.industry && filters.industry !== 'All') params.append('industry', filters.industry);
@@ -1209,36 +1487,533 @@ export async function getDealsStats(filters?: {
     if (filters?.startDate) params.append('start_date', filters.startDate);
     if (filters?.endDate) params.append('end_date', filters.endDate);
     
-    return await apiClient.get<DealsStats>(`/api/v1/deals/stats?${params.toString()}`);
+    return await apiClient.get<LegacyDealsStats>(`/api/v1/deals/stats?${params.toString()}`);
   } catch (error) {
     console.warn('API failed, using mock data:', error);
-    return generateDealsStats();
+    return generateLegacyDealsStats();
   }
 }
 
 // Company price history for sparklines (daily data, last 30 days)
 export async function getCompanyPriceHistory(ticker: string): Promise<{ date: string; price: number }[]> {
+  // Always use mock data for now since API endpoints are not available
+  console.log(`Generating mock price history for ${ticker}`);
+  
+  // Generate mock daily price data for last 30 days
+  const basePrice = mockCompanyDetails[ticker.toUpperCase()]?.price || 100;
+  const data = [];
+  const now = new Date();
+  
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    const randomWalk = (Math.random() - 0.5) * 0.05; // ±2.5% daily volatility
+    const price = i === 0 ? basePrice : basePrice * (1 + randomWalk * (30 - i) / 30);
+    data.push({
+      date: date.toISOString().split('T')[0],
+      price: Math.max(price, basePrice * 0.8) // Floor at 80% of current price
+    });
+  }
+  
+  return data;
+}
+
+// Enhanced Deals API with flagship deal detail pages
+import { DealsListItem, DealDetailPage, DealsStats, DealParty, DealKPI, DealTimelineEntry, DealNewsItem } from '../types';
+
+// Mock data for flagship deals
+const mockDealsData: Record<string, DealDetailPage> = {
+  'msft-atvi': {
+    id: 'msft-atvi',
+    title: 'Microsoft acquires Activision Blizzard for $68.7B',
+    status: 'Closed',
+    announced_at: '2022-01-18T00:00:00Z',
+    closed_at: '2023-10-13T00:00:00Z',
+    value_usd: 68700,
+    premium_pct: 45.3,
+    multiple_ev_ebitda: 13.8,
+    parties: [
+      {
+        name: 'Microsoft Corporation',
+        ticker: 'MSFT',
+        role: 'Acquirer',
+        industry: 'Technology',
+        country: 'United States'
+      },
+      {
+        name: 'Activision Blizzard Inc.',
+        ticker: 'ATVI',
+        role: 'Target',
+        industry: 'Gaming',
+        country: 'United States'
+      }
+    ],
+    overview: 'Microsoft\'s acquisition of Activision Blizzard represents the largest gaming acquisition in history, positioning Microsoft as a dominant player in the gaming industry with iconic franchises including Call of Duty, World of Warcraft, and Candy Crush.',
+    rationale: [
+      'Accelerate growth in Microsoft\'s gaming business across mobile, PC, console and cloud',
+      'Acquire world-class content, talent and franchises including Call of Duty and World of Warcraft',
+      'Enhance Game Pass subscription service with premium content',
+      'Strengthen position in the rapidly growing mobile gaming market through King Digital Entertainment'
+    ],
+    kpis: [
+      { label: 'Transaction Value', value: '$68.7B', hint: 'All-cash transaction' },
+      { label: 'Premium to Market Price', value: '45.3%', deltaPct: 45.3 },
+      { label: 'EV/EBITDA Multiple', value: '13.8x', hint: 'Based on 2022 EBITDA' },
+      { label: 'Price per Share', value: '$95.00', hint: 'Cash consideration' },
+      { label: 'Implied Gaming Revenue', value: '$15.3B', hint: 'Pro forma combined gaming revenue' },
+      { label: 'Cost Synergies (Annual)', value: '$2.0B', hint: 'Expected by year 3', deltaPct: 15.2 }
+    ],
+    timeline: [
+      { date: '2022-01-18T00:00:00Z', title: 'Deal Announced', description: 'Microsoft announces intent to acquire Activision Blizzard', type: 'Announcement' },
+      { date: '2022-04-28T00:00:00Z', title: 'Shareholder Approval', description: 'Activision shareholders approve the transaction', type: 'Shareholder' },
+      { date: '2022-11-08T00:00:00Z', title: 'CMA Investigation', description: 'UK CMA opens Phase 2 investigation', type: 'Regulatory' },
+      { date: '2023-05-15T00:00:00Z', title: 'EU Approval', description: 'European Commission approves transaction with conditions', type: 'Regulatory' },
+      { date: '2023-10-13T00:00:00Z', title: 'Transaction Closes', description: 'Deal officially completed after regulatory approvals', type: 'Closing' }
+    ],
+    news: [
+      {
+        id: 'n1',
+        title: 'Microsoft Completes $69 Billion Activision Blizzard Deal',
+        source: 'Wall Street Journal',
+        url: 'https://wsj.com/microsoft-activision-complete',
+        published_at: '2023-10-13T16:00:00Z',
+        sentiment: 'positive',
+        relevance: 0.98,
+        summary: 'Microsoft has officially completed its $68.7 billion acquisition of Activision Blizzard after nearly two years of regulatory scrutiny.'
+      },
+      {
+        id: 'n2',
+        title: 'Gaming Industry Consolidation Accelerates Post-Microsoft Deal',
+        source: 'Financial Times',
+        url: 'https://ft.com/gaming-consolidation',
+        published_at: '2023-10-14T08:00:00Z',
+        sentiment: 'neutral',
+        relevance: 0.85,
+        summary: 'Industry analysts predict increased M&A activity in gaming sector following successful completion of mega-deal.'
+      }
+    ]
+  },
+  'amzn-wholefoods': {
+    id: 'amzn-wholefoods',
+    title: 'Amazon acquires Whole Foods Market for $13.7B',
+    status: 'Closed',
+    announced_at: '2017-06-16T00:00:00Z',
+    closed_at: '2017-08-28T00:00:00Z',
+    value_usd: 13700,
+    premium_pct: 27.0,
+    multiple_ev_ebitda: 28.2,
+    parties: [
+      {
+        name: 'Amazon.com Inc.',
+        ticker: 'AMZN',
+        role: 'Acquirer',
+        industry: 'E-commerce',
+        country: 'United States'
+      },
+      {
+        name: 'Whole Foods Market Inc.',
+        ticker: 'WFM',
+        role: 'Target',
+        industry: 'Retail',
+        country: 'United States'
+      }
+    ],
+    overview: 'Amazon\'s acquisition of Whole Foods Market marked a major expansion into physical retail and grocery, providing Amazon with 460+ premium grocery stores and accelerating its omnichannel strategy.',
+    rationale: [
+      'Enter the $800B grocery market with established premium brand',
+      'Acquire 460+ physical store locations for faster delivery and pickup',
+      'Integrate Prime membership benefits with grocery shopping',
+      'Leverage Whole Foods\' organic and premium food expertise'
+    ],
+    kpis: [
+      { label: 'Transaction Value', value: '$13.7B', hint: 'All-cash transaction' },
+      { label: 'Premium to Market Price', value: '27.0%', deltaPct: 27.0 },
+      { label: 'EV/EBITDA Multiple', value: '28.2x', hint: 'High multiple for grocery sector' },
+      { label: 'Price per Share', value: '$42.00', hint: 'Cash consideration' },
+      { label: 'Store Count', value: '460+', hint: 'Physical locations acquired' },
+      { label: 'Grocery Market Size', value: '$800B', hint: 'Addressable market opportunity' }
+    ],
+    timeline: [
+      { date: '2017-06-16T00:00:00Z', title: 'Deal Announced', description: 'Amazon announces acquisition of Whole Foods', type: 'Announcement' },
+      { date: '2017-06-29T00:00:00Z', title: 'Shareholder Approval', description: 'Whole Foods shareholders approve transaction', type: 'Shareholder' },
+      { date: '2017-08-23T00:00:00Z', title: 'FTC Clearance', description: 'Federal Trade Commission clears the acquisition', type: 'Regulatory' },
+      { date: '2017-08-28T00:00:00Z', title: 'Transaction Closes', description: 'Deal completed, Whole Foods becomes Amazon subsidiary', type: 'Closing' }
+    ],
+    news: [
+      {
+        id: 'n3',
+        title: 'Amazon-Whole Foods Deal Reshapes Grocery Industry',
+        source: 'Reuters',
+        url: 'https://reuters.com/amazon-wholefoods-impact',
+        published_at: '2017-08-28T14:00:00Z',
+        sentiment: 'positive',
+        relevance: 0.96,
+        summary: 'The acquisition immediately disrupted traditional grocery retailers and accelerated online grocery adoption.'
+      }
+    ]
+  },
+  'meta-giphy': {
+    id: 'meta-giphy',
+    title: 'Meta sells Giphy to Shutterstock for $53M',
+    status: 'Closed',
+    announced_at: '2022-10-13T00:00:00Z',
+    closed_at: '2023-05-31T00:00:00Z',
+    value_usd: 53,
+    premium_pct: -85.0,
+    multiple_ev_ebitda: 2.1,
+    parties: [
+      {
+        name: 'Meta Platforms Inc.',
+        ticker: 'META',
+        role: 'Acquirer',
+        industry: 'Social Media',
+        country: 'United States'
+      },
+      {
+        name: 'Shutterstock Inc.',
+        ticker: 'SSTK',
+        role: 'Target',
+        industry: 'Digital Media',
+        country: 'United States'
+      }
+    ],
+    overview: 'Following regulatory pressure from the UK CMA, Meta was forced to divest Giphy to Shutterstock at a significant loss, representing one of the largest forced divestitures in recent tech history.',
+    rationale: [
+      'Comply with UK Competition and Markets Authority divestiture order',
+      'Resolve regulatory concerns about concentration in GIF market',
+      'Focus resources on core metaverse and social media initiatives',
+      'Eliminate ongoing regulatory uncertainty and costs'
+    ],
+    kpis: [
+      { label: 'Sale Price', value: '$53M', hint: 'Massive loss from $400M acquisition' },
+      { label: 'Loss on Investment', value: '-85.0%', deltaPct: -85.0 },
+      { label: 'Original Acquisition Price', value: '$400M', hint: 'Meta paid in 2020' },
+      { label: 'Regulatory Timeline', value: '30 months', hint: 'From CMA investigation to divestiture' },
+      { label: 'GIF Library Size', value: '1B+', hint: 'GIFs in Giphy database' }
+    ],
+    timeline: [
+      { date: '2020-05-15T00:00:00Z', title: 'Original Acquisition', description: 'Meta (Facebook) acquires Giphy for $400M', type: 'Other' },
+      { date: '2021-11-30T00:00:00Z', title: 'CMA Blocks Deal', description: 'UK regulator orders divestiture', type: 'Regulatory' },
+      { date: '2022-10-13T00:00:00Z', title: 'Sale Announced', description: 'Meta announces sale to Shutterstock', type: 'Announcement' },
+      { date: '2023-05-31T00:00:00Z', title: 'Divestiture Complete', description: 'Shutterstock completes acquisition', type: 'Closing' }
+    ],
+    news: [
+      {
+        id: 'n4',
+        title: 'Meta Forced to Sell Giphy at Massive Loss After Regulatory Order',
+        source: 'Bloomberg',
+        url: 'https://bloomberg.com/meta-giphy-loss',
+        published_at: '2022-10-13T10:00:00Z',
+        sentiment: 'negative',
+        relevance: 0.92,
+        summary: 'The forced sale represents one of the largest losses on a tech acquisition due to regulatory intervention.'
+      }
+    ]
+  },
+  'aapl-beats': {
+    id: 'aapl-beats',
+    title: 'Apple acquires Beats Electronics for $3.0B',
+    status: 'Closed',
+    announced_at: '2014-05-28T00:00:00Z',
+    closed_at: '2014-08-01T00:00:00Z',
+    value_usd: 3000,
+    premium_pct: 15.0,
+    multiple_ev_ebitda: 12.5,
+    parties: [
+      {
+        name: 'Apple Inc.',
+        ticker: 'AAPL',
+        role: 'Acquirer',
+        industry: 'Technology',
+        country: 'United States'
+      },
+      {
+        name: 'Beats Electronics LLC',
+        ticker: undefined,
+        role: 'Target',
+        industry: 'Audio Equipment',
+        country: 'United States'
+      }
+    ],
+    overview: 'Apple\'s acquisition of Beats Electronics brought premium headphone expertise and streaming music capabilities, laying the foundation for Apple Music and enhancing the company\'s audio ecosystem.',
+    rationale: [
+      'Enter premium headphone market with established brand',
+      'Acquire streaming music technology and content relationships',
+      'Add music industry talent including Jimmy Iovine and Dr. Dre',
+      'Enhance ecosystem with high-margin audio accessories'
+    ],
+    kpis: [
+      { label: 'Transaction Value', value: '$3.0B', hint: 'Mix of cash and stock' },
+      { label: 'Premium to Valuation', value: '15.0%', deltaPct: 15.0 },
+      { label: 'Headphone Market Share', value: '27%', hint: 'Beats share in premium segment' },
+      { label: 'Streaming Subscribers', value: '250K', hint: 'Beats Music subscriber base' },
+      { label: 'Annual Revenue Run-rate', value: '$1.8B', hint: 'Beats revenue at acquisition' }
+    ],
+    timeline: [
+      { date: '2014-05-28T00:00:00Z', title: 'Deal Announced', description: 'Apple announces Beats acquisition', type: 'Announcement' },
+      { date: '2014-07-25T00:00:00Z', title: 'Regulatory Approval', description: 'Deal receives necessary approvals', type: 'Regulatory' },
+      { date: '2014-08-01T00:00:00Z', title: 'Transaction Closes', description: 'Beats becomes Apple subsidiary', type: 'Closing' },
+      { date: '2015-06-30T00:00:00Z', title: 'Apple Music Launch', description: 'Apple Music launches based on Beats technology', type: 'Other' }
+    ],
+    news: [
+      {
+        id: 'n5',
+        title: 'Apple Completes $3B Beats Acquisition, Largest in Company History',
+        source: 'TechCrunch',
+        url: 'https://techcrunch.com/apple-beats-complete',
+        published_at: '2014-08-01T18:00:00Z',
+        sentiment: 'positive',
+        relevance: 0.94,
+        summary: 'The acquisition marks Apple\'s largest purchase to date and signals serious entry into music streaming.'
+      }
+    ]
+  }
+};
+
+// Mock deals list data
+const mockDealsListData: DealsListItem[] = [
+  {
+    id: 'msft-atvi',
+    title: 'Microsoft acquires Activision Blizzard',
+    date: '2022-01-18T00:00:00Z',
+    value_usd: 68700,
+    status: 'Closed',
+    acquirer: 'Microsoft Corporation',
+    target: 'Activision Blizzard Inc.',
+    industry: 'Technology',
+    sizeBucket: '$50B+'
+  },
+  {
+    id: 'amzn-wholefoods',
+    title: 'Amazon acquires Whole Foods Market',
+    date: '2017-06-16T00:00:00Z',
+    value_usd: 13700,
+    status: 'Closed',
+    acquirer: 'Amazon.com Inc.',
+    target: 'Whole Foods Market Inc.',
+    industry: 'Consumer Discretionary',
+    sizeBucket: '$10B-$50B'
+  },
+  {
+    id: 'meta-giphy',
+    title: 'Meta divests Giphy to Shutterstock',
+    date: '2022-10-13T00:00:00Z',
+    value_usd: 53,
+    status: 'Closed',
+    acquirer: 'Shutterstock Inc.',
+    target: 'Giphy Inc.',
+    industry: 'Technology',
+    sizeBucket: '<$500M'
+  },
+  {
+    id: 'aapl-beats',
+    title: 'Apple acquires Beats Electronics',
+    date: '2014-05-28T00:00:00Z',
+    value_usd: 3000,
+    status: 'Closed',
+    acquirer: 'Apple Inc.',
+    target: 'Beats Electronics LLC',
+    industry: 'Technology',
+    sizeBucket: '$1B-$10B'
+  },
+  {
+    id: 'nvda-arm-failed',
+    title: 'NVIDIA-ARM deal terminated',
+    date: '2020-09-14T00:00:00Z',
+    value_usd: 40000,
+    status: 'Terminated',
+    acquirer: 'NVIDIA Corporation',
+    target: 'ARM Holdings',
+    industry: 'Technology',
+    sizeBucket: '$10B-$50B'
+  },
+  {
+    id: 'broadcom-vmware',
+    title: 'Broadcom acquires VMware',
+    date: '2022-05-26T00:00:00Z',
+    value_usd: 61000,
+    status: 'Pending',
+    acquirer: 'Broadcom Inc.',
+    target: 'VMware Inc.',
+    industry: 'Technology',
+    sizeBucket: '$50B+'
+  }
+];
+
+// Mock deals stats
+function generateMockDealsStats(filters?: { industry?: string; status?: string; size?: string; startDate?: string; endDate?: string }): DealsStats {
+  const baseStats = {
+    byMonth: [
+      { month: 'Jan 2024', count: 12 },
+      { month: 'Feb 2024', count: 18 },
+      { month: 'Mar 2024', count: 15 },
+      { month: 'Apr 2024', count: 22 },
+      { month: 'May 2024', count: 19 },
+      { month: 'Jun 2024', count: 25 },
+      { month: 'Jul 2024', count: 28 },
+      { month: 'Aug 2024', count: 23 },
+      { month: 'Sep 2024', count: 31 },
+      { month: 'Oct 2024', count: 27 },
+      { month: 'Nov 2024', count: 21 },
+      { month: 'Dec 2024', count: 16 }
+    ],
+    byIndustry: [
+      { industry: 'Technology', count: 87 },
+      { industry: 'Healthcare', count: 62 },
+      { industry: 'Financial Services', count: 45 },
+      { industry: 'Consumer Discretionary', count: 38 },
+      { industry: 'Energy', count: 29 },
+      { industry: 'Materials', count: 23 },
+      { industry: 'Industrials', count: 19 },
+      { industry: 'Utilities', count: 12 }
+    ],
+    bySize: [
+      { bucket: '<$500M', count: 156 },
+      { bucket: '$500M–$1B', count: 78 },
+      { bucket: '$1B–$10B', count: 89 },
+      { bucket: '$10B–$50B', count: 23 },
+      { bucket: '$50B+', count: 9 }
+    ]
+  };
+  
+  // Apply basic filtering simulation
+  if (filters?.industry && filters.industry !== 'All') {
+    const industryMultiplier = filters.industry === 'Technology' ? 1.0 : 0.6;
+    baseStats.byMonth = baseStats.byMonth.map(m => ({ ...m, count: Math.round(m.count * industryMultiplier) }));
+  }
+  
+  return baseStats;
+}
+
+// API Functions
+export async function getDeals(params?: {
+  industry?: string;
+  status?: string;
+  size?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  q?: string;
+}): Promise<DealsListItem[]> {
   try {
-    return await apiClient.get<{ date: string; price: number }[]>(`/api/v1/companies/${ticker.toUpperCase()}/price-history?days=30`);
-  } catch (error) {
-    console.warn('API failed, generating mock price history:', error);
-    // Generate mock daily price data for last 30 days
-    const basePrice = mockCompanyDetails[ticker.toUpperCase()]?.price || 100;
-    const data = [];
-    const now = new Date();
+    const urlParams = new URLSearchParams();
+    if (params?.industry && params.industry !== 'All') urlParams.append('industry', params.industry);
+    if (params?.status && params.status !== 'All') urlParams.append('status', params.status);
+    if (params?.size && params.size !== 'All') urlParams.append('size', params.size);
+    if (params?.startDate) urlParams.append('start_date', params.startDate);
+    if (params?.endDate) urlParams.append('end_date', params.endDate);
+    if (params?.page) urlParams.append('page', params.page.toString());
+    if (params?.q) urlParams.append('q', params.q);
     
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const randomWalk = (Math.random() - 0.5) * 0.05; // ±2.5% daily volatility
-      const price = i === 0 ? basePrice : basePrice * (1 + randomWalk * (30 - i) / 30);
-      data.push({
-        date: date.toISOString().split('T')[0],
-        price: Math.max(price, basePrice * 0.8) // Floor at 80% of current price
-      });
+    const response = await apiClient.get<DealsListItem[]>(`/api/v1/deals?${urlParams.toString()}`);
+    return response;
+  } catch (error) {
+    console.warn('API failed, using mock deals data:', error);
+    
+    // Apply client-side filtering to mock data
+    let filtered = [...mockDealsListData];
+    
+    if (params?.industry && params.industry !== 'All') {
+      filtered = filtered.filter(deal => deal.industry?.toLowerCase().includes(params.industry!.toLowerCase()));
     }
     
-    return data;
+    if (params?.status && params.status !== 'All') {
+      filtered = filtered.filter(deal => deal.status.toLowerCase() === params.status!.toLowerCase());
+    }
+    
+    if (params?.q) {
+      const query = params.q.toLowerCase();
+      filtered = filtered.filter(deal => 
+        deal.title.toLowerCase().includes(query) ||
+        deal.acquirer?.toLowerCase().includes(query) ||
+        deal.target?.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
   }
+}
+
+export async function getDealDetailPage(id: string): Promise<DealDetailPage> {
+  try {
+    const response = await apiClient.get<DealDetailPage>(`/api/v1/deals/${id}`);
+    return response;
+  } catch (error) {
+    console.warn('API failed, using mock deal detail:', error);
+    const mockDeal = mockDealsData[id];
+    if (!mockDeal) {
+      throw new Error(`Deal ${id} not found`);
+    }
+    return mockDeal;
+  }
+}
+
+export async function getDealsStatsNew(filters?: {
+  industry?: string;
+  status?: string;
+  size?: string;
+  startDate?: string;
+  endDate?: string;
+}): Promise<DealsStats> {
+  try {
+    const urlParams = new URLSearchParams();
+    if (filters?.industry && filters.industry !== 'All') urlParams.append('industry', filters.industry);
+    if (filters?.status && filters.status !== 'All') urlParams.append('status', filters.status);
+    if (filters?.size && filters.size !== 'All') urlParams.append('size', filters.size);
+    if (filters?.startDate) urlParams.append('start_date', filters.startDate);
+    if (filters?.endDate) urlParams.append('end_date', filters.endDate);
+    
+    const response = await apiClient.get<DealsStats>(`/api/v1/deals/stats?${urlParams.toString()}`);
+    return response;
+  } catch (error) {
+    console.warn('API failed, using mock deals stats:', error);
+    return generateMockDealsStats(filters);
+  }
+}
+
+// React Query Hooks
+export function useDeals(params?: {
+  industry?: string;
+  status?: string;
+  size?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  q?: string;
+}) {
+  return useQuery({
+    queryKey: ['deals', params],
+    queryFn: () => getDeals(params),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useDealDetailPage(id: string) {
+  return useQuery({
+    queryKey: ['deal-detail-page', id],
+    queryFn: () => getDealDetailPage(id),
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
+    enabled: !!id,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useDealsStatsNew(filters?: {
+  industry?: string;
+  status?: string;
+  size?: string;
+  startDate?: string;
+  endDate?: string;
+}) {
+  return useQuery({
+    queryKey: ['deals-stats-new', filters],
+    queryFn: () => getDealsStatsNew(filters),
+    staleTime: 15 * 60 * 1000, // 15 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
+    refetchOnWindowFocus: false,
+  });
 }
 
 export { API_BASE_URL };

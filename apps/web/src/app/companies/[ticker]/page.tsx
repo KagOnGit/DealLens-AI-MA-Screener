@@ -16,7 +16,8 @@ import { CompanyValuationTab } from '@/components/company/CompanyValuationTab';
 import { CompanyOwnershipTab } from '@/components/company/CompanyOwnershipTab';
 import { CompanyNewsTab } from '@/components/company/CompanyNewsTab';
 
-function formatCurrency(value: number): string {
+function formatCurrency(value: number | undefined): string {
+  if (value === undefined || value === null) return '$0.00';
   if (value >= 1000000) {
     return `$${(value / 1000000).toFixed(1)}T`;
   } else if (value >= 1000) {
@@ -25,7 +26,8 @@ function formatCurrency(value: number): string {
   return `$${value.toFixed(2)}M`;
 }
 
-function formatPercent(value: number): string {
+function formatPercent(value: number | undefined): string {
+  if (value === undefined || value === null) return '0.00%';
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 

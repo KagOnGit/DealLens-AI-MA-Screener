@@ -1,8 +1,15 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
+from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
+import logging
 
-router = APIRouter()
+from app.core.database import get_db
+from app.schemas.responses import SuggestionsResponse, Suggestion
+from app.utils.cache import CacheKeyBuilder, cache_manager
+
+logger = logging.getLogger(__name__)
+router = APIRouter(tags=["search"])
 
 # Mock data - in production these would come from your database
 MOCK_COMPANIES = [
@@ -23,13 +30,29 @@ MOCK_DEALS = [
     {"id": "deal-4", "acquirer": "Adobe", "target": "Figma", "value": 20000},
 ]
 
-@router.get("/search")
-async def search_suggestions(q: str = Query(..., min_length=1)):
+@router.get("/search", response_model=SuggestionsResponse)
+async def search_suggestions(
+    q: str = Query(..., min_length=1, max_length=100),
+    db: Session = Depends(get_db)
+):
     """
     Search for companies, deals, and tickers based on query string.
-    Returns up to 6 suggestions grouped by type.
+    Returns up to 10 suggestions grouped by type with caching.
     """
-    q_lower = q.lower()
+    if not q or len(q.strip()) < 1:
+        return SuggestionsResponse(suggestions=[])
+    
+    query = q.strip()
+    logger.info(f"Searching for: {query}")
+    
+    # Try cache first
+    cache_key = CacheKeyBuilder.search_results(query)
+    cached_data = cache_manager.get(cache_key)
+    if cached_data:
+        logger.debug(f"Cache hit for search: {query}")
+        return SuggestionsResponse(suggestions=cached_data)
+    
+    q_lower = query.lower()
     suggestions = []
     
     # Search companies and tickers
@@ -64,15 +87,16 @@ async def search_suggestions(q: str = Query(..., min_length=1)):
         if (q_lower in deal["acquirer"].lower() or 
             q_lower in deal["target"].lower()):
             
+            value_display = f"${deal['value']:,}M" if deal['value'] < 1000 else f"${deal['value']/1000:.1f}B"
             suggestions.append({
                 "type": "deal",
                 "id": deal["id"],
                 "label": f"{deal['acquirer']} → {deal['target']}",
                 "value": deal["id"],
-                "subtitle": f"${deal['value']:,}M"
+                "subtitle": f"{value_display} • M&A Deal"
             })
     
-    # Remove duplicates and limit to 6 suggestions
+    # Remove duplicates and limit to 10 suggestions
     seen = set()
     unique_suggestions = []
     for suggestion in suggestions:
@@ -80,7 +104,14 @@ async def search_suggestions(q: str = Query(..., min_length=1)):
         if key not in seen:
             seen.add(key)
             unique_suggestions.append(suggestion)
-            if len(unique_suggestions) >= 6:
+            if len(unique_suggestions) >= 10:
                 break
     
-    return {"suggestions": unique_suggestions}
+    # Sort suggestions by type priority (companies first, then tickers, then deals)
+    type_priority = {"company": 0, "ticker": 1, "deal": 2}
+    unique_suggestions.sort(key=lambda x: type_priority.get(x["type"], 3))
+    
+    # Cache the result
+    cache_manager.set(cache_key, unique_suggestions, 300)  # 5 minutes
+    
+    return SuggestionsResponse(suggestions=unique_suggestions)

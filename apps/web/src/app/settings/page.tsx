@@ -3,6 +3,9 @@
 import { useState, useCallback } from 'react'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { useDebounce } from '@/hooks/useDebounce'
+import { useApiStatusStore } from '@/lib/api-status-store'
+import { apiClient } from '@/lib/api'
+import { useQueryClient } from '@tanstack/react-query'
 import { 
   Settings as SettingsIcon,
   User,
@@ -20,10 +23,16 @@ import {
   AlertTriangle,
   Moon,
   Sun,
-  Monitor
+  Monitor,
+  HardDrive,
+  Wifi
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 export default function SettingsPage() {
+  const queryClient = useQueryClient();
+  const { usingMocks, setUsingMocks } = useApiStatusStore();
+
 // User Profile Settings
   const [userName, setUserName] = useState('Jane Doe')
   const [userEmail, setUserEmail] = useState('jane.doe@deallens.ai')
@@ -71,6 +80,36 @@ export default function SettingsPage() {
   const [showSaveToast, setShowSaveToast] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+
+  const handleMockToggle = async (enabled: boolean) => {
+    try {
+      // Update the store immediately for UI responsiveness
+      setUsingMocks(enabled);
+      
+      // Clear React Query caches to force fresh data
+      await queryClient.invalidateQueries();
+      
+      // Clear localStorage banner dismiss state when switching modes
+      localStorage.removeItem('deallens-mock-banner-dismissed');
+      
+      // Run a health check if switching to real API mode
+      if (!enabled) {
+        try {
+          await apiClient.healthCheck();
+          toast.success('Switched to live API data');
+        } catch (error) {
+          toast.error('Failed to connect to live API, falling back to degraded mode');
+        }
+      } else {
+        toast.success('Switched to demo data mode');
+      }
+    } catch (error) {
+      console.error('Error toggling mock mode:', error);
+      toast.error('Failed to switch data mode');
+      // Revert the change if there was an error
+      setUsingMocks(!enabled);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -398,6 +437,37 @@ const ToggleField = ({
           {/* API & Data */}
           <SettingSection title="API & DATA" icon={Database}>
             <div className="space-y-4">
+              <ToggleField
+                label="Use Demo Data (Mocks)"
+                value={usingMocks}
+                onChange={handleMockToggle}
+                description="Switch between live API data and demo data for development"
+              />
+              
+              {usingMocks && (
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <div className="flex items-center space-x-2 text-blue-400 text-sm">
+                    <HardDrive className="h-4 w-4" />
+                    <span className="font-mono">Demo Mode Active</span>
+                  </div>
+                  <p className="text-xs text-blue-300 mt-1">
+                    Using mock data for demonstration. Toggle off to use live API endpoints.
+                  </p>
+                </div>
+              )}
+              
+              {!usingMocks && (
+                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <div className="flex items-center space-x-2 text-green-400 text-sm">
+                    <Wifi className="h-4 w-4" />
+                    <span className="font-mono">Live API Mode Active</span>
+                  </div>
+                  <p className="text-xs text-green-300 mt-1">
+                    Connected to real API endpoints. Data is live and up-to-date.
+                  </p>
+                </div>
+              )}
+              
               <div className="space-y-2">
                 <label className="block text-sm font-mono text-gray-300">API Key</label>
                 <div className="relative">
@@ -407,12 +477,18 @@ const ToggleField = ({
                     onChange={(e) => setApiKey(e.target.value)}
                     onBlur={(e) => debouncedSetApiKey(e.target.value)}
                     placeholder="Enter your API key..."
-                    className="w-full px-4 py-2 pr-12 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary focus:border-terminal-primary font-mono"
+                    disabled={usingMocks}
+                    className={`w-full px-4 py-2 pr-12 bg-black border border-terminal-border rounded text-white focus:outline-none focus:ring-2 focus:ring-terminal-primary focus:border-terminal-primary font-mono ${
+                      usingMocks ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-2.5 text-gray-400 hover:text-white"
+                    disabled={usingMocks}
+                    className={`absolute right-3 top-2.5 text-gray-400 hover:text-white ${
+                      usingMocks ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                   >
                     {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>

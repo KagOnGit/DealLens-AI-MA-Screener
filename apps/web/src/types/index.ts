@@ -279,6 +279,75 @@ export interface DealDetail extends Deal {
   };
 }
 
+// New deal types for flagship deal pages
+export type DealParty = {
+  name: string;
+  ticker?: string;
+  role: 'Acquirer' | 'Target';
+  industry?: string;
+  country?: string;
+};
+
+export type DealKPI = {
+  label: string;
+  value: string | number;
+  hint?: string;
+  deltaPct?: number; // positive/negative coloring
+};
+
+export type DealTimelineEntry = {
+  date: string;            // ISO
+  title: string;
+  description?: string;
+  type: 'Announcement' | 'Regulatory' | 'Shareholder' | 'Closing' | 'Rumor' | 'Other';
+};
+
+export type DealNewsItem = {
+  id: string;
+  title: string;
+  source: string;
+  url: string;
+  published_at: string;    // ISO
+  sentiment: 'positive' | 'neutral' | 'negative';
+  relevance: number;       // 0..1
+  summary?: string;
+};
+
+export type DealDetailPage = {
+  id: string;
+  title: string;           // e.g., "TechCorp Inc. acquires AI Innovations Ltd."
+  status: 'Announced' | 'Pending' | 'Closed' | 'Terminated';
+  announced_at?: string;   // ISO
+  closed_at?: string;      // ISO
+  value_usd?: number;
+  premium_pct?: number;    // offer premium vs unaffected price
+  multiple_ev_ebitda?: number;
+  parties: DealParty[];
+  overview: string;
+  rationale?: string[];
+  kpis: DealKPI[];
+  timeline: DealTimelineEntry[];
+  news: DealNewsItem[];
+};
+
+export type DealsStats = {
+  byMonth: { month: string; count: number }[]; // last 12m
+  byIndustry: { industry: string; count: number }[];
+  bySize: { bucket: string; count: number }[];   // e.g., "<$500m", "$500m–$1B", "$1B–$5B", "$5B+"
+};
+
+export type DealsListItem = {
+  id: string;
+  title: string;
+  date: string;             // ISO (announced)
+  value_usd?: number;
+  status: 'Announced' | 'Pending' | 'Closed' | 'Terminated';
+  acquirer?: string;
+  target?: string;
+  industry?: string;
+  sizeBucket?: string;      // for filters
+};
+
 // Analytics event types
 export interface AnalyticsEvent {
   event: string;

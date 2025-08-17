@@ -2,13 +2,13 @@
 
 import { useParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { ArrowLeft, Building2, DollarSign, Calendar, FileText, TrendingUp, Users, AlertCircle, CheckCircle, Clock, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Building2, DollarSign, Calendar, FileText, TrendingUp, TrendingDown, Users, AlertCircle, CheckCircle, Clock, ExternalLink, Newspaper, ChartBar } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { useDealDetail } from '@/lib/api';
+import { useDealDetailPage } from '@/lib/api';
 
 function formatCurrency(value: number): string {
   if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}T`;
@@ -46,7 +46,7 @@ function getTimelineIcon(type: string, status: 'completed' | 'pending' | 'cancel
 }
 
 function DealDetailContent({ dealId }: { dealId: string }) {
-  const { data: dealDetail, isLoading } = useDealDetail(dealId);
+  const { data: dealDetail, isLoading, error } = useDealDetailPage(dealId);
 
   if (isLoading) {
     return (
@@ -69,7 +69,7 @@ function DealDetailContent({ dealId }: { dealId: string }) {
     );
   }
 
-  if (!dealDetail) {
+  if (error || !dealDetail) {
     return (
       <div className="container mx-auto p-6">
         <div className="flex items-center gap-4 mb-6">
@@ -105,7 +105,7 @@ function DealDetailContent({ dealId }: { dealId: string }) {
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-3xl font-bold">
-              {dealDetail.acquirer} acquires {dealDetail.target}
+              {dealDetail.title}
             </h1>
             <Badge className={getStatusColor(dealDetail.status)}>
               {dealDetail.status}
@@ -117,15 +117,35 @@ function DealDetailContent({ dealId }: { dealId: string }) {
               <Calendar className="h-4 w-4" />
               Announced {new Date(dealDetail.announced_at).toLocaleDateString()}
             </span>
+            {dealDetail.closed_at && (
+              <span className="flex items-center gap-1">
+                <CheckCircle className="h-4 w-4" />
+                Closed {new Date(dealDetail.closed_at).toLocaleDateString()}
+              </span>
+            )}
             <span className="flex items-center gap-1">
-              <Building2 className="h-4 w-4" />
-              {dealDetail.sector}
+              <ChartBar className="h-4 w-4" />
+              ${dealDetail.value_usd.toLocaleString()}M
             </span>
           </div>
 
           <p className="text-gray-700 mb-4 max-w-3xl">
-            {dealDetail.rationale}
+            {dealDetail.overview}
           </p>
+
+          {dealDetail.rationale && dealDetail.rationale.length > 0 && (
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Strategic Rationale</h3>
+              <ul className="space-y-2">
+                {dealDetail.rationale.map((item, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full mt-2 flex-shrink-0" />
+                    <span className="text-gray-700">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Deal Metrics Card */}
@@ -136,53 +156,33 @@ function DealDetailContent({ dealId }: { dealId: string }) {
           <CardContent className="space-y-4">
             <div>
               <p className="text-sm text-gray-600">Transaction Value</p>
-              <p className="text-2xl font-semibold">{formatCurrency(dealDetail.terms.ev)}</p>
+              <p className="text-2xl font-semibold">{formatCurrency(dealDetail.value_usd)}</p>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-600">Premium</p>
-                <p className="text-lg font-semibold">{dealDetail.terms.premium.toFixed(1)}%</p>
+                <p className="text-lg font-semibold">
+                  {dealDetail.premium_pct > 0 ? '+' : ''}{dealDetail.premium_pct.toFixed(1)}%
+                </p>
               </div>
               <div>
-                <p className="text-sm text-gray-600">Deal Value</p>
-                <p className="text-lg font-semibold">{formatCurrency(dealDetail.value)}</p>
+                <p className="text-sm text-gray-600">EV/EBITDA</p>
+                <p className="text-lg font-semibold">{dealDetail.multiple_ev_ebitda.toFixed(1)}x</p>
               </div>
             </div>
 
-            <Separator />
-
-            <div>
-              <p className="text-sm text-gray-600 mb-2">Payment Structure</p>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Cash</span>
-                  <span>{dealDetail.terms.payment_mix.cash_percent}%</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Stock</span>
-                  <span>{dealDetail.terms.payment_mix.stock_percent}%</span>
-                </div>
-              </div>
-            </div>
-
-            {dealDetail.price_impact && (
+            {dealDetail.parties && dealDetail.parties.length >= 2 && (
               <>
                 <Separator />
                 <div>
-                  <p className="text-sm text-gray-600 mb-2">Price Impact</p>
+                  <p className="text-sm text-gray-600 mb-2">Deal Parties</p>
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Acquirer</span>
-                      <span className={dealDetail.price_impact.acquirer_change >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {dealDetail.price_impact.acquirer_change >= 0 ? '+' : ''}{dealDetail.price_impact.acquirer_change.toFixed(1)}%
-                      </span>
+                    <div className="text-sm">
+                      <span className="font-medium">Acquirer:</span> {dealDetail.parties.find(p => p.role === 'Acquirer')?.name}
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Target</span>
-                      <span className={dealDetail.price_impact.target_change >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {dealDetail.price_impact.target_change >= 0 ? '+' : ''}{dealDetail.price_impact.target_change.toFixed(1)}%
-                      </span>
+                    <div className="text-sm">
+                      <span className="font-medium">Target:</span> {dealDetail.parties.find(p => p.role === 'Target')?.name}
                     </div>
                   </div>
                 </div>
@@ -192,190 +192,141 @@ function DealDetailContent({ dealId }: { dealId: string }) {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Timeline */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Deal Timeline
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {dealDetail.timeline.map((entry, index) => (
-                <div key={entry.id} className="relative">
-                  {index < dealDetail.timeline.length - 1 && (
-                    <div className="absolute left-2.5 top-6 h-full w-0.5 bg-gray-200" />
-                  )}
-                  
-                  <div className="flex items-start gap-4">
-                    <div className="mt-1">
-                      {getTimelineIcon(entry.type, entry.status)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-medium">{entry.title}</h3>
-                        <Badge 
-                          variant="outline" 
-                          className={`text-xs ${
-                            entry.status === 'completed' ? 'text-green-700 border-green-300' :
-                            entry.status === 'cancelled' ? 'text-red-700 border-red-300' :
-                            'text-gray-700 border-gray-300'
-                          }`}
-                        >
-                          {entry.status}
-                        </Badge>
+      {/* Key Metrics Grid */}
+      {dealDetail.kpis && dealDetail.kpis.length > 0 && (
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Key Metrics</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            {dealDetail.kpis.map((kpi, index) => {
+              const hasChange = kpi.deltaPct !== undefined;
+              const isPositive = kpi.deltaPct && kpi.deltaPct > 0;
+              
+              return (
+                <Card key={index}>
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-600 mb-1">{kpi.label}</p>
+                        <p className="text-2xl font-bold text-gray-900">{kpi.value}</p>
+                        {kpi.hint && (
+                          <p className="text-xs text-gray-500 mt-1">{kpi.hint}</p>
+                        )}
                       </div>
-                      <p className="text-sm text-gray-600 mb-1">
-                        {new Date(entry.date).toLocaleDateString()}
-                      </p>
-                      {entry.description && (
-                        <p className="text-sm text-gray-700">{entry.description}</p>
+                      {hasChange && (
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-sm font-medium ${
+                          isPositive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                        }`}>
+                          {isPositive ? (
+                            <TrendingUp className="w-4 h-4" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4" />
+                          )}
+                          {Math.abs(kpi.deltaPct!).toFixed(1)}%
+                        </div>
                       )}
                     </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-        {/* Parties & Advisors */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Deal Parties
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {/* Companies */}
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <h4 className="font-medium text-sm text-gray-600 mb-2">Acquirer</h4>
-                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                    <div>
-                      <p className="font-medium">{dealDetail.parties.acquirer.name}</p>
-                      <p className="text-sm text-gray-600">{dealDetail.parties.acquirer.ticker}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">${dealDetail.parties.acquirer.price}</p>
-                      <p className="text-sm text-gray-600">{formatCurrency(dealDetail.parties.acquirer.market_cap || 0)}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="font-medium text-sm text-gray-600 mb-2">Target</h4>
-                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                    <div>
-                      <p className="font-medium">{dealDetail.parties.target.name}</p>
-                      <p className="text-sm text-gray-600">{dealDetail.parties.target.ticker}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">${dealDetail.parties.target.price}</p>
-                      <p className="text-sm text-gray-600">{formatCurrency(dealDetail.parties.target.market_cap || 0)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Advisors */}
-              {dealDetail.parties.advisors && (
-                <div>
-                  <h4 className="font-medium text-sm text-gray-600 mb-3">Advisors</h4>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm font-medium mb-1">Financial</p>
-                      <div className="flex flex-wrap gap-2">
-                        {dealDetail.parties.advisors.financial.map((advisor, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {advisor}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium mb-1">Legal</p>
-                      <div className="flex flex-wrap gap-2">
-                        {dealDetail.parties.advisors.legal.map((advisor, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {advisor}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* News & Filings */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent News */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent News</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {dealDetail.news.slice(0, 5).map((article) => (
-                <div key={article.id} className="border-b last:border-b-0 pb-4 last:pb-0">
-                  <h4 className="font-medium leading-tight mb-1">
-                    {article.headline}
-                  </h4>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                    <span>{article.source}</span>
-                    <span>•</span>
-                    <span>{new Date(article.published_at).toLocaleDateString()}</span>
-                  </div>
-                  {article.summary && (
-                    <p className="text-sm text-gray-700 mb-2">{article.summary}</p>
-                  )}
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={article.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
-                      <ExternalLink className="h-3 w-3" />
-                      Read More
-                    </a>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Filings & Documents */}
-        {dealDetail.filings && (
+        {/* Timeline */}
+        {dealDetail.timeline && dealDetail.timeline.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Filings & Documents
+                <Calendar className="h-5 w-5" />
+                Deal Timeline
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {dealDetail.filings.map((filing, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <p className="font-medium">{filing.type}</p>
-                      <p className="text-sm text-gray-600">
-                        {new Date(filing.date).toLocaleDateString()}
-                      </p>
-                      {filing.description && (
-                        <p className="text-sm text-gray-700 mt-1">{filing.description}</p>
+              <div className="space-y-6">
+                {dealDetail.timeline.map((entry, index) => {
+                  const typeColors = {
+                    'Announcement': 'bg-blue-100 border-blue-200 text-blue-800',
+                    'Regulatory': 'bg-orange-100 border-orange-200 text-orange-800',
+                    'Shareholder': 'bg-purple-100 border-purple-200 text-purple-800',
+                    'Closing': 'bg-green-100 border-green-200 text-green-800',
+                    'Other': 'bg-gray-100 border-gray-200 text-gray-800'
+                  };
+                  const typeColor = typeColors[entry.type as keyof typeof typeColors] || typeColors['Other'];
+                  
+                  return (
+                    <div key={index} className="relative">
+                      {index < dealDetail.timeline!.length - 1 && (
+                        <div className="absolute left-6 top-12 w-px h-full bg-gray-200" />
                       )}
+                      
+                      <div className="flex gap-4">
+                        <div className="flex-shrink-0">
+                          <div className="w-12 h-12 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center">
+                            <Calendar className="w-6 h-6 text-gray-600" />
+                          </div>
+                        </div>
+                        <div className="flex-1 pb-8">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-lg font-semibold text-gray-900">{entry.title}</h3>
+                            <span className={`px-2 py-1 rounded text-xs font-medium border ${typeColor}`}>
+                              {entry.type}
+                            </span>
+                          </div>
+                          <p className="text-gray-600 mb-2">{entry.description}</p>
+                          <time className="text-sm text-gray-500">
+                            {new Date(entry.date).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </time>
+                        </div>
+                      </div>
                     </div>
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={filing.url} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </Button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Deal Parties */}
+        {dealDetail.parties && dealDetail.parties.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Deal Parties
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {dealDetail.parties.map((party, index) => (
+                  <div key={index} className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="flex items-start gap-4">
+                      <div className="flex-shrink-0">
+                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                          <Building2 className="w-6 h-6 text-gray-600" />
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="text-lg font-semibold text-gray-900">{party.name}</h3>
+                          {party.ticker && (
+                            <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-sm font-medium">
+                              {party.ticker}
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-1 text-sm text-gray-600">
+                          <p><span className="font-medium">Role:</span> {party.role}</p>
+                          <p><span className="font-medium">Industry:</span> {party.industry}</p>
+                          <p><span className="font-medium">Country:</span> {party.country}</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -383,6 +334,67 @@ function DealDetailContent({ dealId }: { dealId: string }) {
           </Card>
         )}
       </div>
+
+      {/* Recent News */}
+      {dealDetail.news && dealDetail.news.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Newspaper className="h-5 w-5" />
+              Recent News
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {dealDetail.news.map((newsItem) => {
+                const sentimentColors = {
+                  'positive': 'text-green-600',
+                  'negative': 'text-red-600',
+                  'neutral': 'text-gray-600'
+                };
+                
+                return (
+                  <article key={newsItem.id} className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                          <a href={newsItem.url} target="_blank" rel="noopener noreferrer" 
+                             className="hover:text-blue-600 transition-colors">
+                            {newsItem.title}
+                          </a>
+                        </h3>
+                        <div className="flex items-center gap-4 text-sm text-gray-500">
+                          <span className="font-medium">{newsItem.source}</span>
+                          <time>
+                            {new Date(newsItem.published_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </time>
+                          {newsItem.relevance && (
+                            <span className="text-blue-600 font-medium">
+                              {Math.round(newsItem.relevance * 100)}% relevance
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {newsItem.sentiment && (
+                        <span className={`text-sm font-medium ${sentimentColors[newsItem.sentiment as keyof typeof sentimentColors]}`}>
+                          {newsItem.sentiment}
+                        </span>
+                      )}
+                    </div>
+                    {newsItem.summary && (
+                      <p className="text-gray-700 leading-relaxed">{newsItem.summary}</p>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

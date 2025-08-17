@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { MockModeBanner } from '../MockModeBanner'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -13,9 +14,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   return (
-    <div className="h-screen flex bg-black text-white font-mono">
-      {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 bg-terminal-surface border-r border-terminal-border flex-shrink-0`}>
+    <>
+      <MockModeBanner />
+      <div className="h-screen flex bg-black text-white font-mono">
+        {/* Sidebar */}
+        <div className={`${sidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 bg-terminal-surface border-r border-terminal-border flex-shrink-0`}>
         <div className="flex items-center justify-between p-4">
           {sidebarOpen && (
             <h1 className="text-terminal-primary font-bold text-xl">DealLens</h1>
@@ -44,5 +47,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </main>
       </div>
     </div>
+    </>
   )
 }

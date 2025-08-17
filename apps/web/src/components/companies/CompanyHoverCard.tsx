@@ -157,7 +157,6 @@ export function CompanyHoverCard({ ticker, children, prefetch = true }: CompanyH
           align="center"
           sideOffset={8}
           className="bg-[hsl(var(--popover-background))] border border-[hsl(var(--border))] rounded-lg shadow-lg z-50 transform transition-all duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
-          onOpenAutoFocus={(e) => e.preventDefault()}
         >
           {isLoading ? (
             <CompanyPreviewSkeleton />

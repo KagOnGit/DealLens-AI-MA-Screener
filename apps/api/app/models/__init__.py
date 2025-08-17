@@ -5,6 +5,7 @@ from .watchlist import Watchlist
 from .alert import Alert, AlertCategory, AlertSeverity, AlertStatus
 from .ai_insight import AIInsight, InsightType
 from .market_data import MarketData, FinancialMetric, NewsItem
+from .ownership import InstitutionalOwnership, InsiderTransaction, DealTimeline
 
 __all__ = [
     "Company",
@@ -13,5 +14,6 @@ __all__ = [
     "Watchlist",
     "Alert", "AlertCategory", "AlertSeverity", "AlertStatus",
     "AIInsight", "InsightType",
-    "MarketData", "FinancialMetric", "NewsItem"
+    "MarketData", "FinancialMetric", "NewsItem",
+    "InstitutionalOwnership", "InsiderTransaction", "DealTimeline"
 ]

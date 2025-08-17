@@ -201,7 +201,6 @@ export function NotificationsPopover({
           align="end"
           sideOffset={8}
           className="bg-[hsl(var(--popover-background))] border border-[hsl(var(--border))] rounded-lg shadow-lg p-4 w-80 z-50 max-h-96 overflow-hidden flex flex-col"
-          onOpenAutoFocus={(e) => e.preventDefault()}
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
         >
