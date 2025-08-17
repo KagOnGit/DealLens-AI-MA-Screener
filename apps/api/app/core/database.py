@@ -12,7 +12,9 @@ class Base(DeclarativeBase):
 
 from app.core.config import settings
 
-DATABASE_URL = settings.DATABASE_URL or "postgresql://localhost/deallens_dev"
+# Get the raw DATABASE_URL without async conversion for sync operations
+raw_db_url = os.getenv("DATABASE_URL", "")
+DATABASE_URL = raw_db_url or "postgresql://localhost/deallens_dev"
 
 def _derive_async(url: str) -> str:
     if url.startswith("postgresql+asyncpg://"):
@@ -21,15 +23,24 @@ def _derive_async(url: str) -> str:
         return url.replace("postgresql://","postgresql+asyncpg://",1)
     return url
 
-ASYNC_DATABASE_URL = _derive_async(os.getenv("ASYNC_DATABASE_URL","").strip() or DATABASE_URL)
+# For async operations, use the converted URL from settings or derive it
+ASYNC_DATABASE_URL = _derive_async(os.getenv("ASYNC_DATABASE_URL","").strip() or raw_db_url or "postgresql://localhost/deallens_dev")
 
-# Only create engines if we have a valid URL
+# Only create engines if we have a valid URL and necessary dependencies
 if DATABASE_URL and DATABASE_URL != "postgresql://localhost/deallens_dev":
-    sync_engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-    SessionLocal = sessionmaker(bind=sync_engine, autocommit=False, autoflush=False, class_=Session)
+    try:
+        sync_engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        SessionLocal = sessionmaker(bind=sync_engine, autocommit=False, autoflush=False, class_=Session)
+    except Exception:
+        sync_engine = None
+        SessionLocal = None
     
-    async_engine = create_async_engine(ASYNC_DATABASE_URL, pool_pre_ping=True)
-    AsyncSessionLocal = async_sessionmaker(bind=async_engine, expire_on_commit=False, class_=AsyncSession)
+    try:
+        async_engine = create_async_engine(ASYNC_DATABASE_URL, pool_pre_ping=True)
+        AsyncSessionLocal = async_sessionmaker(bind=async_engine, expire_on_commit=False, class_=AsyncSession)
+    except Exception:
+        async_engine = None
+        AsyncSessionLocal = None
 else:
     # Placeholder engines for development/testing
     sync_engine = None
