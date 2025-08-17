@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Dict, Any
 
-from ....core.database import get_db
-from ....models.company import Company as CompanyModel
+from app.core.database import get_db
+from app.models.company import Company as CompanyModel
 
 router = APIRouter()
 
