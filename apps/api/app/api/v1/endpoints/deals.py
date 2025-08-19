@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models.deal import Deal, DealStatus, DealType
 from app.models.company import Company
 from app.models.market_data import NewsItem
-from app.schemas.responses import (
+# from app.schemas.responses import (
     DealsListItem,
     DealDetailPage,
     DealsResponse,
@@ -263,7 +263,7 @@ def _generate_mock_deal_detail(deal_id: str) -> dict:
     }
 
 
-@router.get("/deals", response_model=DealsResponse)
+@router.get("/deals", )
 async def get_deals(
     industry: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -361,7 +361,7 @@ async def get_deals(
     return response
 
 
-@router.get("/deals/{id}", response_model=DealDetailPage)
+@router.get("/deals/{id}", )
 async def get_deal_detail(
     id: str,
     db: Session = Depends(get_db)

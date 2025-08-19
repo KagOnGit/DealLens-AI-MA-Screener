@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.models.company import Company
 from app.models.market_data import MarketData, FinancialMetric, NewsItem
 from app.models.ownership import InstitutionalOwnership, InsiderTransaction
-from app.schemas.responses import (
+# from app.schemas.responses import (
     CompanyDetail,
     CompanyTimeseries,
     CompanyOwnership,
@@ -197,7 +197,7 @@ def _generate_mock_news_data(ticker: str) -> List[dict]:
     return news_items[:random.randint(1, 3)]  # Return 1-3 news items
 
 
-@router.get("/companies/{ticker}", response_model=CompanyDetail)
+@router.get("/companies/{ticker}", )
 async def get_company_detail(
     ticker: str,
     db: Session = Depends(get_db)
@@ -267,7 +267,7 @@ async def get_company_detail(
     return detail
 
 
-@router.get("/companies/{ticker}/timeseries", response_model=CompanyTimeseries)
+@router.get("/companies/{ticker}/timeseries", )
 async def get_company_timeseries(
     ticker: str,
     db: Session = Depends(get_db)
@@ -297,7 +297,7 @@ async def get_company_timeseries(
     return timeseries_data
 
 
-@router.get("/companies/{ticker}/ownership", response_model=CompanyOwnership)
+@router.get("/companies/{ticker}/ownership", )
 async def get_company_ownership(
     ticker: str,
     db: Session = Depends(get_db)
@@ -327,7 +327,7 @@ async def get_company_ownership(
     return ownership_data
 
 
-@router.get("/companies/{ticker}/news", response_model=List[CompanyNews])
+@router.get("/companies/{ticker}/news", )
 async def get_company_news(
     ticker: str,
     db: Session = Depends(get_db)

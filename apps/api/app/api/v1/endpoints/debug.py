@@ -3,12 +3,12 @@ Debug endpoints for API contract examples and development assistance.
 """
 from fastapi import APIRouter
 from datetime import datetime
-from app.schemas.responses import DebugContractsResponse, ContractExample
+# from app.schemas.responses import DebugContractsResponse, ContractExample
 
 router = APIRouter(tags=["debug"])
 
 
-@router.get("/_debug/contracts", response_model=DebugContractsResponse)
+@router.get("/_debug/contracts", )
 async def get_api_contracts():
     """
     Get example payloads for each API endpoint to aid frontend development.

@@ -23,7 +23,7 @@ from app.core.deps import get_current_user, get_current_active_user
 from app.models.user import User
 
 # From app.schemas.*
-from app.schemas.auth import (
+# from app.schemas.auth import (
     UserRegister,
     UserLogin,
     RefreshTokenRequest,
@@ -43,7 +43,7 @@ from app.core.config import settings
 limiter = Limiter(key_func=get_remote_address)
 
 
-@router.post("/register", response_model=AuthResponse)
+@router.post("/register", )
 @limiter.limit(settings.RATE_LIMIT_AUTH)
 def register_user(
     request: Request,
@@ -97,7 +97,7 @@ def register_user(
     )
 
 
-@router.post("/login", response_model=AuthResponse)
+@router.post("/login", )
 @limiter.limit(settings.RATE_LIMIT_AUTH)
 def login_user(
     request: Request,
@@ -134,7 +134,7 @@ def login_user(
     )
 
 
-@router.post("/login-form", response_model=AuthResponse)
+@router.post("/login-form", )
 @limiter.limit(settings.RATE_LIMIT_AUTH)
 def login_with_form(
     request: Request,
@@ -172,7 +172,7 @@ def login_with_form(
     return AuthResponse(user=UserSchema.model_validate(user), tokens=Token(**tokens))
 
 
-@router.post("/refresh", response_model=Token)
+@router.post("/refresh", )
 @limiter.limit(settings.RATE_LIMIT_AUTH)
 def refresh_access_token(
     request: Request,
@@ -207,7 +207,7 @@ def refresh_access_token(
     return Token(**tokens)
 
 
-@router.get("/me", response_model=UserProfile)
+@router.get("/me", )
 def get_current_user_profile(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
@@ -223,7 +223,7 @@ def get_current_user_profile(
     return user_profile
 
 
-@router.put("/me", response_model=UserSchema)
+@router.put("/me", )
 def update_current_user(
     user_update: UserSettings,
     db: Session = Depends(get_db),
@@ -255,7 +255,7 @@ def update_current_user(
     return UserSchema.model_validate(current_user)
 
 
-@router.post("/change-password", response_model=MessageResponse)
+@router.post("/change-password", )
 def change_password(
     password_data: PasswordChange,
     db: Session = Depends(get_db),
@@ -286,7 +286,7 @@ def change_password(
     return MessageResponse(message="Password changed successfully")
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post("/logout", )
 def logout_user(current_user: User = Depends(get_current_user)) -> Any:
     """Logout user (client should discard tokens)."""
     # In a production app, you might want to blacklist the token

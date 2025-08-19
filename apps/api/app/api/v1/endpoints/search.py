@@ -5,7 +5,7 @@ from datetime import datetime
 import logging
 
 from app.core.database import get_db
-from app.schemas.responses import SuggestionsResponse, Suggestion
+# from app.schemas.responses import SuggestionsResponse, Suggestion
 from app.utils.cache import CacheKeyBuilder, cache_manager
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ MOCK_DEALS = [
     {"id": "deal-4", "acquirer": "Adobe", "target": "Figma", "value": 20000},
 ]
 
-@router.get("/search", response_model=SuggestionsResponse)
+@router.get("/search", )
 async def search_suggestions(
     q: str = Query(..., min_length=1, max_length=100),
     db: Session = Depends(get_db)
