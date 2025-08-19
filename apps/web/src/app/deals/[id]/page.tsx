@@ -9,6 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useDealDetailPage } from '@/lib/api';
+import { DealDetailLayout } from '@/components/deals/DealDetailLayout';
+import { MetricCard } from '@/components/deals/MetricCard';
+import { TimelineItem } from '@/components/deals/TimelineItem';
+import { PartyCard } from '@/components/deals/PartyCard';
+import { Section } from '@/components/deals/Section';
 
 function formatCurrency(value: number): string {
   if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}T`;
@@ -91,311 +96,235 @@ function DealDetailContent({ dealId }: { dealId: string }) {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <DealDetailLayout>
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link href="/deals" className="flex items-center gap-2 text-sm hover:text-blue-600">
+      <div className="flex items-center gap-4 mb-6">
+        <Link href="/deals" className="flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors">
           <ArrowLeft className="h-4 w-4" />
           Back to Deals
         </Link>
       </div>
 
       {/* Deal Header */}
-      <div className="flex flex-col lg:flex-row lg:items-start gap-6">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-3xl font-bold">
-              {dealDetail.title}
-            </h1>
-            <Badge className={getStatusColor(dealDetail.status)}>
-              {dealDetail.status}
-            </Badge>
-          </div>
-          
-          <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-3xl font-bold text-white">
+            {dealDetail.title}
+          </h1>
+          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+            dealDetail.status.toLowerCase() === 'completed' ? 'bg-green-500/20 text-green-300' :
+            dealDetail.status.toLowerCase() === 'pending' ? 'bg-yellow-500/20 text-yellow-300' :
+            dealDetail.status.toLowerCase() === 'terminated' ? 'bg-red-500/20 text-red-300' :
+            'bg-blue-500/20 text-blue-300'
+          }`}>
+            {dealDetail.status}
+          </span>
+        </div>
+        
+        <div className="flex items-center gap-4 text-sm text-white/70 mb-4">
+          <span className="flex items-center gap-1">
+            <Calendar className="h-4 w-4" />
+            Announced {new Date(dealDetail.announced_at).toLocaleDateString()}
+          </span>
+          {dealDetail.closed_at && (
             <span className="flex items-center gap-1">
-              <Calendar className="h-4 w-4" />
-              Announced {new Date(dealDetail.announced_at).toLocaleDateString()}
+              <CheckCircle className="h-4 w-4" />
+              Closed {new Date(dealDetail.closed_at).toLocaleDateString()}
             </span>
-            {dealDetail.closed_at && (
-              <span className="flex items-center gap-1">
-                <CheckCircle className="h-4 w-4" />
-                Closed {new Date(dealDetail.closed_at).toLocaleDateString()}
-              </span>
-            )}
-            <span className="flex items-center gap-1">
-              <ChartBar className="h-4 w-4" />
-              ${dealDetail.value_usd.toLocaleString()}M
-            </span>
-          </div>
-
-          <p className="text-gray-700 mb-4 max-w-3xl">
-            {dealDetail.overview}
-          </p>
-
-          {dealDetail.rationale && dealDetail.rationale.length > 0 && (
-            <div className="mb-6">
-              <h3 className="font-semibold text-gray-900 mb-3">Strategic Rationale</h3>
-              <ul className="space-y-2">
-                {dealDetail.rationale.map((item, index) => (
-                  <li key={index} className="flex items-start gap-2">
-                    <div className="w-2 h-2 bg-blue-600 rounded-full mt-2 flex-shrink-0" />
-                    <span className="text-gray-700">{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
           )}
+          <span className="flex items-center gap-1">
+            <ChartBar className="h-4 w-4" />
+            ${dealDetail.value_usd.toLocaleString()}M
+          </span>
         </div>
 
-        {/* Deal Metrics Card */}
-        <Card className="lg:w-80">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Deal Terms</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600">Transaction Value</p>
-              <p className="text-2xl font-semibold">{formatCurrency(dealDetail.value_usd)}</p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Premium</p>
-                <p className="text-lg font-semibold">
-                  {dealDetail.premium_pct > 0 ? '+' : ''}{dealDetail.premium_pct.toFixed(1)}%
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">EV/EBITDA</p>
-                <p className="text-lg font-semibold">{dealDetail.multiple_ev_ebitda.toFixed(1)}x</p>
-              </div>
-            </div>
+        <p className="text-white/80 mb-4 max-w-3xl leading-relaxed">
+          {dealDetail.overview}
+        </p>
 
-            {dealDetail.parties && dealDetail.parties.length >= 2 && (
-              <>
-                <Separator />
-                <div>
-                  <p className="text-sm text-gray-600 mb-2">Deal Parties</p>
-                  <div className="space-y-2">
-                    <div className="text-sm">
-                      <span className="font-medium">Acquirer:</span> {dealDetail.parties.find(p => p.role === 'Acquirer')?.name}
-                    </div>
-                    <div className="text-sm">
-                      <span className="font-medium">Target:</span> {dealDetail.parties.find(p => p.role === 'Target')?.name}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        {dealDetail.rationale && dealDetail.rationale.length > 0 && (
+          <div className="mb-6">
+            <h3 className="font-semibold text-white mb-3">Strategic Rationale</h3>
+            <ul className="space-y-2">
+              {dealDetail.rationale.map((item, index) => (
+                <li key={index} className="flex items-start gap-2">
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full mt-2 flex-shrink-0" />
+                  <span className="text-white/80">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Key Metrics Grid */}
       {dealDetail.kpis && dealDetail.kpis.length > 0 && (
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Key Metrics</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <Section id="metrics" title="Key Metrics">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {dealDetail.kpis.map((kpi, index) => {
               const hasChange = kpi.deltaPct !== undefined;
               const isPositive = kpi.deltaPct && kpi.deltaPct > 0;
               
               return (
-                <Card key={index}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-600 mb-1">{kpi.label}</p>
-                        <p className="text-2xl font-bold text-gray-900">{kpi.value}</p>
-                        {kpi.hint && (
-                          <p className="text-xs text-gray-500 mt-1">{kpi.hint}</p>
-                        )}
-                      </div>
-                      {hasChange && (
-                        <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-sm font-medium ${
-                          isPositive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                        }`}>
-                          {isPositive ? (
-                            <TrendingUp className="w-4 h-4" />
-                          ) : (
-                            <TrendingDown className="w-4 h-4" />
-                          )}
-                          {Math.abs(kpi.deltaPct!).toFixed(1)}%
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                <MetricCard
+                  key={index}
+                  label={kpi.label}
+                  value={kpi.value}
+                  hint={kpi.hint}
+                  trend={hasChange ? (isPositive ? 'up' : 'down') : undefined}
+                  change={hasChange ? Math.abs(kpi.deltaPct!).toFixed(1) + '%' : undefined}
+                />
               );
             })}
           </div>
-        </div>
+        </Section>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Timeline */}
         {dealDetail.timeline && dealDetail.timeline.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Deal Timeline
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {dealDetail.timeline.map((entry, index) => {
-                  const typeColors = {
-                    'Announcement': 'bg-blue-100 border-blue-200 text-blue-800',
-                    'Regulatory': 'bg-orange-100 border-orange-200 text-orange-800',
-                    'Shareholder': 'bg-purple-100 border-purple-200 text-purple-800',
-                    'Closing': 'bg-green-100 border-green-200 text-green-800',
-                    'Other': 'bg-gray-100 border-gray-200 text-gray-800'
-                  };
-                  const typeColor = typeColors[entry.type as keyof typeof typeColors] || typeColors['Other'];
-                  
-                  return (
-                    <div key={index} className="relative">
-                      {index < dealDetail.timeline!.length - 1 && (
-                        <div className="absolute left-6 top-12 w-px h-full bg-gray-200" />
-                      )}
-                      
-                      <div className="flex gap-4">
-                        <div className="flex-shrink-0">
-                          <div className="w-12 h-12 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center">
-                            <Calendar className="w-6 h-6 text-gray-600" />
-                          </div>
-                        </div>
-                        <div className="flex-1 pb-8">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-semibold text-gray-900">{entry.title}</h3>
-                            <span className={`px-2 py-1 rounded text-xs font-medium border ${typeColor}`}>
-                              {entry.type}
-                            </span>
-                          </div>
-                          <p className="text-gray-600 mb-2">{entry.description}</p>
-                          <time className="text-sm text-gray-500">
-                            {new Date(entry.date).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric'
-                            })}
-                          </time>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+          <Section id="timeline" title="Deal Timeline">
+            <div className="space-y-4">
+              {dealDetail.timeline.map((entry, index) => {
+                const getTagColor = (type: string) => {
+                  switch (type.toLowerCase()) {
+                    case 'announcement': return 'blue';
+                    case 'regulatory': return 'orange';
+                    case 'shareholder': return 'purple';
+                    case 'closing': return 'green';
+                    default: return 'gray';
+                  }
+                };
+                
+                return (
+                  <TimelineItem
+                    key={index}
+                    date={new Date(entry.date).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                    title={entry.title}
+                    description={entry.description}
+                    tag={entry.type}
+                    tagColor={getTagColor(entry.type)}
+                    isLast={index === dealDetail.timeline!.length - 1}
+                  />
+                );
+              })}
+            </div>
+          </Section>
         )}
 
         {/* Deal Parties */}
         {dealDetail.parties && dealDetail.parties.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Deal Parties
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {dealDetail.parties.map((party, index) => (
-                  <div key={index} className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
-                    <div className="flex items-start gap-4">
-                      <div className="flex-shrink-0">
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                          <Building2 className="w-6 h-6 text-gray-600" />
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">{party.name}</h3>
-                          {party.ticker && (
-                            <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-sm font-medium">
-                              {party.ticker}
-                            </span>
-                          )}
-                        </div>
-                        <div className="space-y-1 text-sm text-gray-600">
-                          <p><span className="font-medium">Role:</span> {party.role}</p>
-                          <p><span className="font-medium">Industry:</span> {party.industry}</p>
-                          <p><span className="font-medium">Country:</span> {party.country}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <Section id="parties" title="Deal Parties">
+            <div className="space-y-4">
+              {dealDetail.parties.map((party, index) => (
+                <PartyCard
+                  key={index}
+                  title={party.role}
+                  name={party.name}
+                  ticker={party.ticker}
+                  industry={party.industry}
+                  country={party.country}
+                  role={party.role}
+                />
+              ))}
+            </div>
+          </Section>
         )}
       </div>
 
       {/* Recent News */}
       {dealDetail.news && dealDetail.news.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Newspaper className="h-5 w-5" />
-              Recent News
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {dealDetail.news.map((newsItem) => {
-                const sentimentColors = {
-                  'positive': 'text-green-600',
-                  'negative': 'text-red-600',
-                  'neutral': 'text-gray-600'
-                };
-                
-                return (
-                  <article key={newsItem.id} className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                          <a href={newsItem.url} target="_blank" rel="noopener noreferrer" 
-                             className="hover:text-blue-600 transition-colors">
-                            {newsItem.title}
-                          </a>
-                        </h3>
-                        <div className="flex items-center gap-4 text-sm text-gray-500">
-                          <span className="font-medium">{newsItem.source}</span>
-                          <time>
-                            {new Date(newsItem.published_at).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
-                            })}
-                          </time>
-                          {newsItem.relevance && (
-                            <span className="text-blue-600 font-medium">
-                              {Math.round(newsItem.relevance * 100)}% relevance
-                            </span>
-                          )}
-                        </div>
+        <Section id="news" title="Recent News">
+          <div className="space-y-4">
+            {dealDetail.news.map((newsItem) => {
+              const getSentimentColor = (sentiment: string) => {
+                switch (sentiment.toLowerCase()) {
+                  case 'positive': return 'text-green-400';
+                  case 'negative': return 'text-red-400';
+                  default: return 'text-white/60';
+                }
+              };
+              
+              return (
+                <article key={newsItem.id} className="bg-white/5 p-6 rounded-lg border border-white/10">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-white mb-2">
+                        <a href={newsItem.url} target="_blank" rel="noopener noreferrer" 
+                           className="hover:text-emerald-400 transition-colors">
+                          {newsItem.title}
+                        </a>
+                      </h3>
+                      <div className="flex items-center gap-4 text-sm text-white/60">
+                        <span className="font-medium">{newsItem.source}</span>
+                        <time>
+                          {new Date(newsItem.published_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </time>
+                        {newsItem.relevance && (
+                          <span className="text-emerald-400 font-medium">
+                            {Math.round(newsItem.relevance * 100)}% relevance
+                          </span>
+                        )}
                       </div>
-                      {newsItem.sentiment && (
-                        <span className={`text-sm font-medium ${sentimentColors[newsItem.sentiment as keyof typeof sentimentColors]}`}>
-                          {newsItem.sentiment}
-                        </span>
-                      )}
                     </div>
-                    {newsItem.summary && (
-                      <p className="text-gray-700 leading-relaxed">{newsItem.summary}</p>
+                    {newsItem.sentiment && (
+                      <span className={`text-sm font-medium ${getSentimentColor(newsItem.sentiment)}`}>
+                        {newsItem.sentiment}
+                      </span>
                     )}
-                  </article>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                  </div>
+                  {newsItem.summary && (
+                    <p className="text-white/80 leading-relaxed">{newsItem.summary}</p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </Section>
       )}
-    </div>
+
+      {/* Sidebar */}
+      <aside className="bg-white/5 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Deal Terms</h3>
+        <div className="space-y-4">
+          <MetricCard
+            label="Transaction Value"
+            value={formatCurrency(dealDetail.value_usd)}
+          />
+          <MetricCard
+            label="Premium"
+            value={`${dealDetail.premium_pct > 0 ? '+' : ''}${dealDetail.premium_pct.toFixed(1)}%`}
+            trend={dealDetail.premium_pct > 0 ? 'up' : 'down'}
+          />
+          <MetricCard
+            label="EV/EBITDA Multiple"
+            value={`${dealDetail.multiple_ev_ebitda.toFixed(1)}x`}
+          />
+        </div>
+        
+        {dealDetail.parties && dealDetail.parties.length >= 2 && (
+          <div className="mt-6">
+            <h4 className="font-medium text-white mb-3">Key Parties</h4>
+            <div className="space-y-2 text-sm">
+              <div className="text-white/80">
+                <span className="text-white/60">Acquirer:</span> {dealDetail.parties.find(p => p.role === 'Acquirer')?.name}
+              </div>
+              <div className="text-white/80">
+                <span className="text-white/60">Target:</span> {dealDetail.parties.find(p => p.role === 'Target')?.name}
+              </div>
+            </div>
+          </div>
+        )}
+      </aside>
+    </DealDetailLayout>
   );
 }
 
