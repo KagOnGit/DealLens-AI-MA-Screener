@@ -1,3 +1,4 @@
+import { logEnvHealthOnce } from "@/lib/env-guard";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from '@vercel/analytics/react';
@@ -22,6 +23,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({
+  if (typeof window !== "undefined") logEnvHealthOnce();
   children,
 }: Readonly<{
   children: React.ReactNode;

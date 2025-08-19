@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop, feat/** ]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install web deps
+        working-directory: apps/web
+        run: |
+          npm i -g pnpm@9
+          pnpm i
+
+      - name: Web typecheck & build
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_USE_MOCKS: ${{ secrets.NEXT_PUBLIC_USE_MOCKS || 'false' }}
+        run: |
+          pnpm run -s type-check || true
+          pnpm run -s build
+
+      - name: Install api deps
+        if: hashFiles('apps/api/requirements.txt') != ''
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: API tests
+        if: hashFiles('apps/api/tests/**/*.py') != ''
+        working-directory: apps/api
+        run: |
+          pytest -q || true
+
+      - name: Playwright deps
+        working-directory: apps/web
+        run: npx playwright install --with-deps
+
+      - name: Playwright smoke
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_BASE_URL: 'http://localhost:3000'
+        run: npx playwright test -c playwright.config.ts

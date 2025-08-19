@@ -1,3 +1,7 @@
+try:
+    from app.observability import sentry  # noqa: F401
+except Exception:
+    pass
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
