@@ -1,7 +1,9 @@
 /**
  * Logger utility for telemetry and debugging
- * No-ops by default in production, can be extended with Sentry or other providers
+ * Integrates with Sentry when available, console fallback otherwise
  */
+
+import * as Sentry from '@sentry/nextjs';
 
 export interface LogEvent {
   event: string;
@@ -21,6 +23,7 @@ type TelemetryEvent = ApiStatusChangeEvent | LogEvent;
 class Logger {
   private isDevelopment = process.env.NODE_ENV === 'development';
   private sentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+  private sentryAvailable = typeof Sentry !== 'undefined' && !!this.sentryDsn;
 
   /**
    * Log a telemetry event
@@ -31,10 +34,15 @@ class Logger {
       console.info('📊 Telemetry:', event);
     }
 
-    // Future: Add Sentry integration
-    if (this.sentryDsn) {
-      // TODO: Send to Sentry when NEXT_PUBLIC_SENTRY_DSN is configured
-      // Sentry.addBreadcrumb({ message: event.event, data: event });
+    // Send to Sentry if available
+    if (this.sentryAvailable) {
+      Sentry.addBreadcrumb({
+        message: event.event,
+        category: 'telemetry',
+        level: 'info',
+        data: event,
+        timestamp: Date.now() / 1000,
+      });
     }
   }
 
@@ -79,9 +87,18 @@ class Logger {
 
     console.error('❌ Error:', logData);
 
-    // Future: Send errors to Sentry
-    if (this.sentryDsn && error instanceof Error) {
-      // Sentry.captureException(error, { contexts: { custom: context } });
+    // Send errors to Sentry
+    if (this.sentryAvailable) {
+      if (error instanceof Error) {
+        Sentry.withScope((scope) => {
+          scope.setContext('custom', context || {});
+          scope.setTag('component', 'api-client');
+          scope.setLevel('error');
+          Sentry.captureException(error);
+        });
+      } else {
+        Sentry.captureMessage(message, 'error');
+      }
     }
   }
 
@@ -97,6 +114,17 @@ class Logger {
 
     if (this.isDevelopment) {
       console.warn('⚠️ Warning:', logData);
+    }
+
+    // Send warnings to Sentry as breadcrumbs
+    if (this.sentryAvailable) {
+      Sentry.addBreadcrumb({
+        message,
+        category: 'warning',
+        level: 'warning',
+        data: context,
+        timestamp: Date.now() / 1000,
+      });
     }
   }
 

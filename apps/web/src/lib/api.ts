@@ -1,6 +1,7 @@
 import { useApiStatusStore } from './api-status-store';
 import { logger } from './logger';
 import toast from 'react-hot-toast';
+import * as Sentry from '@sentry/nextjs';
 
 // Environment configuration with guardrails
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -160,6 +161,21 @@ export class ApiClient {
     const requestId = generateRequestId();
     const store = useApiStatusStore.getState();
     
+    // Add Sentry breadcrumb for API request
+    if (typeof Sentry !== 'undefined' && process.env.NEXT_PUBLIC_SENTRY_DSN) {
+      Sentry.addBreadcrumb({
+        message: `API Request: ${options.method || 'GET'} ${endpoint}`,
+        category: 'api',
+        level: 'info',
+        data: {
+          url: `${this.baseUrl}${endpoint}`,
+          method: options.method || 'GET',
+          requestId,
+        },
+        timestamp: Date.now() / 1000,
+      });
+    }
+    
     return withRetry(async () => {
       const url = `${this.baseUrl}${endpoint}`;
       
@@ -181,6 +197,23 @@ export class ApiClient {
         clearTimeout(timeoutId);
         
         if (!response.ok) {
+          // Add Sentry breadcrumb for API failures
+          if (typeof Sentry !== 'undefined' && process.env.NEXT_PUBLIC_SENTRY_DSN) {
+            Sentry.addBreadcrumb({
+              message: `API Request Failed: ${response.status} ${response.statusText}`,
+              category: 'api.error',
+              level: 'error',
+              data: {
+                url,
+                method: options.method || 'GET',
+                status: response.status,
+                statusText: response.statusText,
+                requestId,
+              },
+              timestamp: Date.now() / 1000,
+            });
+          }
+          
           throw new Error(`API request failed: ${response.status} ${response.statusText}`);
         }
         
@@ -188,6 +221,23 @@ export class ApiClient {
         return response.json();
       } catch (error) {
         clearTimeout(timeoutId);
+        
+        // Add Sentry breadcrumb for network errors
+        if (typeof Sentry !== 'undefined' && process.env.NEXT_PUBLIC_SENTRY_DSN) {
+          Sentry.addBreadcrumb({
+            message: `API Network Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            category: 'api.error',
+            level: 'error',
+            data: {
+              url,
+              method: options.method || 'GET',
+              error: error instanceof Error ? error.message : String(error),
+              requestId,
+            },
+            timestamp: Date.now() / 1000,
+          });
+        }
+        
         throw error;
       }
     }, endpoint, requestId);
