@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { CompanyDetail, CompanyOwnership } from '@/types';
 import { PieChart as PieChartIcon, Users, TrendingUp, TrendingDown, Building2, Download } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { CustomTooltip } from '../CustomTooltip';
 
 interface CompanyOwnershipTabProps {
   company: CompanyDetail;
@@ -56,19 +57,6 @@ export function CompanyOwnershipTab({ company, ownership }: CompanyOwnershipTabP
     link.click();
   };
 
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-white dark:bg-gray-900 p-3 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-            {data.label}: {data.value.toFixed(1)}%
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <div className="space-y-6">
@@ -99,7 +87,7 @@ export function CompanyOwnershipTab({ company, ownership }: CompanyOwnershipTabP
                       <Cell key={`cell-${index}`} fill={slice.color} />
                     ))}
                   </Pie>
-                  <Tooltip content={<CustomTooltip />} />
+                  <Tooltip content={<CustomTooltip formatTooltipValue={(value, name) => [`${value.toFixed(1)}%`, name]} />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

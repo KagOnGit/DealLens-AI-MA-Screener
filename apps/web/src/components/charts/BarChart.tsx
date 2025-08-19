@@ -10,6 +10,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
+import { CustomTooltip } from '../CustomTooltip'
 
 export interface BarChartProps {
   data: any[]
@@ -46,36 +47,6 @@ const defaultColors = [
   '#06B6D4', // cyan-500
 ]
 
-const CustomTooltip = ({ active, payload, label, formatTooltipValue }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white dark:bg-gray-900 p-3 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
-        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
-          {label}
-        </p>
-        {payload.map((entry: any, index: number) => {
-          const [formattedValue, formattedName] = formatTooltipValue
-            ? formatTooltipValue(entry.value, entry.name || entry.dataKey)
-            : [entry.value, entry.name || entry.dataKey]
-          
-          return (
-            <div key={index} className="flex items-center space-x-2 text-sm">
-              <div
-                className="w-3 h-3 rounded-sm"
-                style={{ backgroundColor: entry.color }}
-              />
-              <span className="text-gray-600 dark:text-gray-400">{formattedName}:</span>
-              <span className="font-medium text-gray-900 dark:text-gray-100">
-                {formattedValue}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-  return null
-}
 
 export function BarChart({
   data,

@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useDeals, useDealsStatsNew } from '@/lib/api'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { CustomTooltip } from '@/components/CustomTooltip'
 
 // Filter options
 const industries = ['All', 'Technology', 'Healthcare', 'Financial Services', 'Energy', 'Consumer Discretionary', 'Materials', 'Industrials']
@@ -261,13 +262,7 @@ function DealsPageContent() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="month" stroke="#9CA3AF" fontSize={12} />
                     <YAxis stroke="#9CA3AF" fontSize={12} />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#1F2937', 
-                        border: '1px solid #374151',
-                        color: '#fff'
-                      }} 
-                    />
+                    <Tooltip content={<CustomTooltip />} />
                     <Bar dataKey="count" fill="#3B82F6" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -295,13 +290,7 @@ function DealsPageContent() {
                         <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#1F2937', 
-                        border: '1px solid #374151',
-                        color: '#fff'
-                      }} 
-                    />
+                    <Tooltip content={<CustomTooltip />} />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -318,13 +307,7 @@ function DealsPageContent() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="bucket" stroke="#9CA3AF" fontSize={12} />
                     <YAxis stroke="#9CA3AF" fontSize={12} />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#1F2937', 
-                        border: '1px solid #374151',
-                        color: '#fff'
-                      }} 
-                    />
+                    <Tooltip content={<CustomTooltip />} />
                     <Bar dataKey="count" fill="#10B981" />
                   </BarChart>
                 </ResponsiveContainer>
