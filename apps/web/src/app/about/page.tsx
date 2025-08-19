@@ -30,13 +30,16 @@ export default function AboutPage() {
 
       <section className="grid gap-6 md:grid-cols-[160px,1fr] items-start">
         <div className="flex justify-center">
-          <Image
-            src="/aditya.jpg"
-            alt="Aditya Singh"
-            width={120}
-            height={120}
-            className="rounded-xl border border-border/50 object-cover"
-          />
+          <picture>
+            <source srcSet="/images/aditya-singh.webp" type="image/webp" />
+            <Image
+              src="/images/aditya-singh.jpg"
+              alt="Aditya Singh"
+              width={120}
+              height={120}
+              className="rounded-xl border border-border/50 object-cover"
+            />
+          </picture>
         </div>
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
@@ -72,8 +75,8 @@ export default function AboutPage() {
         <h2 className="text-lg font-medium mb-3">Contact</h2>
         <p className="text-sm text-muted-foreground">
           Email: <a className="hover:underline" href="mailto:adityasingh0929@gmail.com">adityasingh0929@gmail.com</a> ·
-          GitHub: <a className="hover:underline" href="https://github.com/" target="_blank">github.com/</a> ·
-          LinkedIn: <a className="hover:underline" href="https://www.linkedin.com/in/" target="_blank">/in/</a>
+          GitHub: <a className="hover:underline" href="https://github.com/KagOnGit" target="_blank">github.com/KagOnGit</a> ·
+          LinkedIn: <a className="hover:underline" href="https://www.linkedin.com/in/aditya-singh-9b119326" target="_blank">linkedin.com/in/aditya-singh-9b119326</a>
         </p>
       </section>
     </main>
