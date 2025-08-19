@@ -321,7 +321,7 @@ import {
   CompaniesResponse,
   SuggestionsResponse,
 } from '../types';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 
 // Graceful failure helper
 async function handleApiRequest<T>(
@@ -2124,14 +2124,6 @@ async function safeFetch<T>(path: string, mock: T, init?: RequestInit): Promise<
   }
 }
 
-export async function getComps(params: Record<string,string|number> = {}): Promise<CompsResponse> {
-  const qs = new URLSearchParams(Object.entries(params).map(([k,v])=>[k,String(v)])).toString();
-  return safeFetch<CompsResponse>(`api/v1/comps${qs ? `?${qs}` : ""}`, mockComps);
-}
-export async function getPrecedents(params: Record<string,string|number> = {}): Promise<PrecedentsResponse> {
-  const qs = new URLSearchParams(Object.entries(params).map(([k,v])=>[k,String(v)])).toString();
-  return safeFetch<PrecedentsResponse>(`api/v1/precedents${qs ? `?${qs}` : ""}`, mockPrecedents);
-}
 export async function getMarketSnapshot(): Promise<MarketSnapshot> {
   return safeFetch<MarketSnapshot>("api/v1/market/snapshot", mockMarket);
 }
@@ -2140,6 +2132,465 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
 export const useComps = (params: Record<string,string|number> = {}) =>
   useQuery({ queryKey:["comps", params], queryFn: () => getComps(params), staleTime: 5*60*1000 });
 export const usePrecedents = (params: Record<string,string|number> = {}) =>
-  useQuery({ queryKey:["precedents", params], queryFn: () => getPrecedents(params), staleTime: 5*60*1000 });
+  useQuery({ queryKey:["precedents", params], queryFn: () => getPrecedents(), staleTime: 5*60*1000 });
 export const useMarketSnapshot = () =>
   useQuery({ queryKey:["market/snapshot"], queryFn: getMarketSnapshot, refetchInterval: 60*1000 });
+
+// ----------------------------
+// Enhanced IB API Functions
+// ----------------------------
+
+// Enhanced Comps API with rich mock data
+export async function getCompsEnhanced(params: Record<string,string|number> = {}) {
+  const qs = new URLSearchParams(Object.entries(params).map(([k,v])=>[k,String(v)])).toString();
+  try {
+    const store = useApiStatusStore.getState();
+    if (store.usingMocks) throw new Error('Using mocks');
+    const response = await fetch(`${PROXY}/api/v1/comps${qs ? `?${qs}` : ""}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return await response.json();
+  } catch (e) {
+    console.warn('⚠️ Comps API failed, using mock data:', e);
+    return {
+      items: [
+        { ticker: "AAPL", name: "Apple Inc.", sector: "Technology", price: 180.50, market_cap: 2800000, pe: 28.5, ev_ebitda: 22.1, rev_growth: 8.2, ebitda_margin: 29.5, ndebt: 15000 },
+        { ticker: "MSFT", name: "Microsoft Corporation", sector: "Technology", price: 378.25, market_cap: 2700000, pe: 32.1, ev_ebitda: 24.8, rev_growth: 12.1, ebitda_margin: 42.1, ndebt: 22000 },
+        { ticker: "GOOGL", name: "Alphabet Inc.", sector: "Communication Services", price: 135.80, market_cap: 1700000, pe: 25.4, ev_ebitda: 18.9, rev_growth: 9.8, ebitda_margin: 27.3, ndebt: 8500 },
+        { ticker: "AMZN", name: "Amazon.com Inc.", sector: "Consumer Discretionary", price: 142.33, market_cap: 1400000, pe: 45.2, ev_ebitda: 26.4, rev_growth: 15.3, ebitda_margin: 8.2, ndebt: 35000 },
+        { ticker: "TSLA", name: "Tesla Inc.", sector: "Consumer Discretionary", price: 238.45, market_cap: 800000, pe: 65.8, ev_ebitda: 42.1, rev_growth: 28.5, ebitda_margin: 9.2, ndebt: 5000 }
+      ],
+      total: 5,
+      page: 1,
+      limit: 50,
+      summary: { median_pe: 32.1, median_ev_ebitda: 24.8, count: 5 }
+    };
+  }
+}
+
+// Enhanced Precedents API with rich deal data
+export async function getPrecedentsEnhanced(params: Record<string,string|number> = {}) {
+  const qs = new URLSearchParams(Object.entries(params).map(([k,v])=>[k,String(v)])).toString();
+  try {
+    const store = useApiStatusStore.getState();
+    if (store.usingMocks) throw new Error('Using mocks');
+    const response = await fetch(`${PROXY}/api/v1/precedents${qs ? `?${qs}` : ""}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return await response.json();
+  } catch (e) {
+    console.warn('⚠️ Precedents API failed, using mock data:', e);
+    return {
+      items: [
+        { id: "msft-atvi", acquirer: "Microsoft Corporation", target: "Activision Blizzard Inc.", announced: "2022-01-18", status: "Completed", industry: "Technology", value: 68700, ev_ebitda: 18.8, premium: 45.3, cash_percent: 100.0, stock_percent: 0.0, advisors: { buy: ["Allen & Company"], sell: ["Goldman Sachs", "J.P. Morgan"] }},
+        { id: "avgo-vmw", acquirer: "Broadcom Inc.", target: "VMware Inc.", announced: "2022-05-26", status: "Completed", industry: "Technology", value: 69000, ev_ebitda: 19.2, premium: 49.0, cash_percent: 100.0, stock_percent: 0.0, advisors: { buy: ["Goldman Sachs", "J.P. Morgan"], sell: ["Morgan Stanley", "Credit Suisse"] }},
+        { id: "pfe-sgen", acquirer: "Pfizer Inc.", target: "Seagen Inc.", announced: "2023-03-13", status: "Completed", industry: "Healthcare", value: 43000, ev_ebitda: 25.8, premium: 32.8, cash_percent: 100.0, stock_percent: 0.0, advisors: { buy: ["Morgan Stanley", "Guggenheim"], sell: ["Goldman Sachs", "Evercore"] }}
+      ],
+      summary: { total_value: 180700, median_ev_ebitda: 19.2, median_premium: 45.3 }
+    };
+  }
+}
+
+
+// DCF Valuation API
+export async function postDCF(payload: any) {
+  try {
+    const store = useApiStatusStore.getState();
+    if (store.usingMocks) throw new Error('Using mocks');
+    const response = await fetch(`${PROXY}/api/v1/valuation/dcf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return await response.json();
+  } catch (e) {
+    console.warn('⚠️ DCF API failed, using mock calculation:', e);
+    // Mock DCF calculation
+    const { base_revenue, growth, ebitda_margin, wacc, lgr } = payload;
+    let revenue = base_revenue;
+    const projections = [];
+    
+    for (let i = 0; i < 5; i++) {
+      revenue = revenue * (1 + growth[i]);
+      const ebitda = revenue * ebitda_margin[i];
+      const fcff = ebitda * 0.6; // Simplified
+      const pv = fcff / Math.pow(1 + wacc, i + 1);
+      projections.push({ year: 2025 + i, revenue, ebitda, fcff, pv });
+    }
+    
+    const pv_sum = projections.reduce((sum, p) => sum + p.pv, 0);
+    const tv_pv = (projections[4].fcff * (1 + lgr)) / (wacc - lgr) / Math.pow(1 + wacc, 5);
+    const ev = pv_sum + tv_pv;
+    
+    return {
+      projections,
+      pv_sum,
+      tv_pv,
+      ev,
+      sensitivity: [
+        { wacc: wacc - 0.005, g: lgr, ev: ev * 1.1 },
+        { wacc: wacc, g: lgr, ev },
+        { wacc: wacc + 0.005, g: lgr, ev: ev * 0.9 }
+      ]
+    };
+  }
+}
+
+// React Query hooks for enhanced IB functionality
+export const useCompsEnhanced = (params: Record<string,string|number> = {}) =>
+  useQuery({ queryKey:["comps-enhanced", params], queryFn: () => getCompsEnhanced(params), staleTime: 5*60*1000 });
+
+export const usePrecedentsEnhanced = (params: Record<string,string|number> = {}) =>
+  useQuery({ queryKey:["precedents-enhanced", params], queryFn: () => getPrecedentsEnhanced(params), staleTime: 5*60*1000 });
+
+export const useLeagueTables = (params: Record<string,string|number> = {}) =>
+  useQuery({ queryKey:["league-tables", params], queryFn: () => getLeagueTables(params), staleTime: 10*60*1000 });
+
+export const useDCFMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: postDCF,
+    onSuccess: () => {
+      // Invalidate and refetch any related queries
+      queryClient.invalidateQueries({ queryKey: ['dcf'] });
+    },
+  });
+};
+
+// ----------------------------
+// New IB Types & API Helpers
+// ----------------------------
+
+export type CompRow = {
+  ticker: string; 
+  name: string; 
+  sector: string; 
+  region: string;
+  price: number; 
+  market_cap: number; 
+  revenue: number; 
+  ebitda: number;
+  pe: number; 
+  ev_ebitda: number; 
+  ev_sales: number;
+};
+
+export type PrecedentDeal = {
+  id: string;
+  acquirer: string; 
+  target: string; 
+  sector: string; 
+  status: "Announced"|"Completed";
+  announced: string; 
+  value: number; 
+  ev_ebitda?: number; 
+  premium?: number;
+  rationale?: string; 
+  terms?: string;
+  timeline?: Array<{date:string; title:string; note?:string; tag?:string;}>;
+};
+
+export type LeagueRow = { 
+  advisor: string; 
+  rank: number; 
+  deals: number; 
+  total_value: number; 
+  avg_size: number; 
+  sector?: string; 
+};
+
+// Rich mock data for comps
+const mockCompsData: CompRow[] = [
+  { ticker: "AAPL", name: "Apple Inc.", sector: "Technology", region: "US", price: 180.50, market_cap: 2800000, revenue: 394000, ebitda: 130000, pe: 28.5, ev_ebitda: 22.1, ev_sales: 7.1 },
+  { ticker: "MSFT", name: "Microsoft Corporation", sector: "Technology", region: "US", price: 378.25, market_cap: 2700000, revenue: 211000, ebitda: 89000, pe: 32.1, ev_ebitda: 24.8, ev_sales: 12.8 },
+  { ticker: "GOOGL", name: "Alphabet Inc.", sector: "Technology", region: "US", price: 135.80, market_cap: 1700000, revenue: 283000, ebitda: 77000, pe: 25.4, ev_ebitda: 18.9, ev_sales: 6.0 },
+  { ticker: "AMZN", name: "Amazon.com Inc.", sector: "Consumer Discretionary", region: "US", price: 142.33, market_cap: 1400000, revenue: 514000, ebitda: 42000, pe: 45.2, ev_ebitda: 26.4, ev_sales: 2.7 },
+  { ticker: "TSLA", name: "Tesla Inc.", sector: "Consumer Discretionary", region: "US", price: 238.45, market_cap: 800000, revenue: 96000, ebitda: 8800, pe: 65.8, ev_ebitda: 42.1, ev_sales: 8.3 },
+  { ticker: "META", name: "Meta Platforms Inc.", sector: "Communication Services", region: "US", price: 298.67, market_cap: 750000, revenue: 134000, ebitda: 46000, pe: 22.7, ev_ebitda: 15.3, ev_sales: 5.6 },
+  { ticker: "NVDA", name: "NVIDIA Corporation", sector: "Technology", region: "US", price: 875.28, market_cap: 2200000, revenue: 79000, ebitda: 32000, pe: 68.2, ev_ebitda: 55.1, ev_sales: 27.8 },
+  { ticker: "JPM", name: "JPMorgan Chase & Co.", sector: "Financial Services", region: "US", price: 158.92, market_cap: 460000, revenue: 155000, ebitda: 62000, pe: 12.8, ev_ebitda: 8.9, ev_sales: 3.0 },
+  { ticker: "CVX", name: "Chevron Corporation", sector: "Energy", region: "US", price: 156.44, market_cap: 295000, revenue: 200000, ebitda: 45000, pe: 13.4, ev_ebitda: 8.2, ev_sales: 1.5 },
+  { ticker: "BRK.B", name: "Berkshire Hathaway Inc.", sector: "Financial Services", region: "US", price: 425.18, market_cap: 950000, revenue: 365000, ebitda: 45000, pe: 21.1, ev_ebitda: 18.9, ev_sales: 2.6 }
+];
+
+// Rich mock data for precedent deals
+const mockPrecedentsData: PrecedentDeal[] = [
+  {
+    id: "msft-atvi",
+    acquirer: "Microsoft Corporation",
+    target: "Activision Blizzard Inc.",
+    sector: "Technology",
+    status: "Completed",
+    announced: "2022-01-18",
+    value: 68700,
+    ev_ebitda: 18.8,
+    premium: 45.3,
+    rationale: "Strategic acquisition to expand gaming capabilities and cloud infrastructure, adding iconic franchises including Call of Duty, World of Warcraft, and Candy Crush.",
+    terms: "All-cash transaction at $95.00 per share. Break fee of $3.0B. Expected annual cost synergies of $2.0B by year 3.",
+    timeline: [
+      { date: "2022-01-18", title: "Deal Announced", note: "Microsoft announces intent to acquire Activision Blizzard", tag: "announcement" },
+      { date: "2022-04-28", title: "Shareholder Approval", note: "Activision shareholders approve the transaction", tag: "regulatory" },
+      { date: "2022-11-08", title: "CMA Investigation", note: "UK CMA opens Phase 2 investigation", tag: "regulatory" },
+      { date: "2023-05-15", title: "EU Approval", note: "European Commission approves transaction with conditions", tag: "regulatory" },
+      { date: "2023-10-13", title: "Transaction Closes", note: "Deal officially completed after regulatory approvals", tag: "closing" }
+    ]
+  },
+  {
+    id: "avgo-vmw",
+    acquirer: "Broadcom Inc.",
+    target: "VMware Inc.",
+    sector: "Technology",
+    status: "Completed",
+    announced: "2022-05-26",
+    value: 69000,
+    ev_ebitda: 19.2,
+    premium: 49.0,
+    rationale: "Acquisition to strengthen position in enterprise software and accelerate multi-cloud strategy.",
+    terms: "All-cash transaction at $142.50 per share plus special dividend of $12.00. Break fee of $1.5B.",
+    timeline: [
+      { date: "2022-05-26", title: "Deal Announced", note: "Broadcom announces VMware acquisition", tag: "announcement" },
+      { date: "2022-08-19", title: "Regulatory Filings", note: "Merger documents filed with regulators", tag: "regulatory" },
+      { date: "2023-11-22", title: "Transaction Closes", note: "Acquisition completed", tag: "closing" }
+    ]
+  },
+  {
+    id: "pfe-sgen",
+    acquirer: "Pfizer Inc.",
+    target: "Seagen Inc.",
+    sector: "Healthcare",
+    status: "Completed",
+    announced: "2023-03-13",
+    value: 43000,
+    ev_ebitda: 25.8,
+    premium: 32.8,
+    rationale: "Acquisition of leading ADC technology platform to enhance oncology portfolio and pipeline.",
+    terms: "All-cash transaction at $229.00 per share. Expected to be accretive to earnings by 2030.",
+    timeline: [
+      { date: "2023-03-13", title: "Deal Announced", note: "Pfizer announces Seagen acquisition", tag: "announcement" },
+      { date: "2023-06-28", title: "Shareholder Approval", note: "Seagen shareholders approve transaction", tag: "regulatory" },
+      { date: "2023-12-14", title: "Transaction Closes", note: "Acquisition completed", tag: "closing" }
+    ]
+  },
+  {
+    id: "cvs-aetna",
+    acquirer: "CVS Health Corporation",
+    target: "Aetna Inc.",
+    sector: "Healthcare",
+    status: "Completed",
+    announced: "2017-12-03",
+    value: 77000,
+    ev_ebitda: 16.4,
+    premium: 28.2,
+    rationale: "Vertical integration to create healthcare ecosystem combining pharmacy, insurance, and care delivery.",
+    terms: "Mix of cash ($145/share) and stock ($50.84/share). Break fee of $2.1B.",
+    timeline: [
+      { date: "2017-12-03", title: "Deal Announced", note: "CVS announces Aetna acquisition", tag: "announcement" },
+      { date: "2018-11-28", title: "Transaction Closes", note: "Acquisition completed", tag: "closing" }
+    ]
+  },
+  {
+    id: "dis-fox",
+    acquirer: "The Walt Disney Company",
+    target: "Twenty-First Century Fox Inc.",
+    sector: "Communication Services",
+    status: "Completed",
+    announced: "2017-12-14",
+    value: 71300,
+    ev_ebitda: 14.8,
+    premium: 19.1,
+    rationale: "Acquisition of content assets to compete in streaming and direct-to-consumer markets.",
+    terms: "All-stock transaction valued at $38/share. Break fee of $2.5B.",
+    timeline: [
+      { date: "2017-12-14", title: "Deal Announced", note: "Disney announces 21CF acquisition", tag: "announcement" },
+      { date: "2019-03-20", title: "Transaction Closes", note: "Acquisition completed after Comcast bidding war", tag: "closing" }
+    ]
+  }
+];
+
+// Mock league tables data
+const mockLeagueData: LeagueRow[] = [
+  { advisor: "Goldman Sachs", rank: 1, deals: 47, total_value: 145000, avg_size: 3085, sector: "All" },
+  { advisor: "Morgan Stanley", rank: 2, deals: 42, total_value: 132000, avg_size: 3143, sector: "All" },
+  { advisor: "J.P. Morgan", rank: 3, deals: 39, total_value: 118000, avg_size: 3026, sector: "All" },
+  { advisor: "Bank of America", rank: 4, deals: 35, total_value: 98000, avg_size: 2800, sector: "All" },
+  { advisor: "Evercore", rank: 5, deals: 28, total_value: 89000, avg_size: 3179, sector: "All" },
+  { advisor: "Centerview Partners", rank: 6, deals: 24, total_value: 85000, avg_size: 3542, sector: "All" },
+  { advisor: "Credit Suisse", rank: 7, deals: 31, total_value: 76000, avg_size: 2452, sector: "All" },
+  { advisor: "Lazard", rank: 8, deals: 29, total_value: 72000, avg_size: 2483, sector: "All" },
+  { advisor: "Deutsche Bank", rank: 9, deals: 26, total_value: 65000, avg_size: 2500, sector: "All" },
+  { advisor: "Barclays", rank: 10, deals: 23, total_value: 58000, avg_size: 2522, sector: "All" }
+];
+
+// API Helper Functions
+export async function getComps(params?: { sector?: string; region?: string }): Promise<CompRow[]> {
+  const store = useApiStatusStore.getState();
+  
+  try {
+    if (store.usingMocks) throw new Error('Using mocks');
+    
+    const urlParams = new URLSearchParams();
+    if (params?.sector && params.sector !== 'All') urlParams.append('sector', params.sector);
+    if (params?.region && params.region !== 'All') urlParams.append('region', params.region);
+    
+    const response = await fetch(`${API_BASE_URL}/api/v1/comps?${urlParams.toString()}`, {
+      cache: 'no-store'
+    });
+    
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    
+    const data = await response.json();
+    return data.items || data;
+  } catch (error) {
+    console.warn('⚠️ Comps API failed, using mock data:', error);
+    
+    // Apply client-side filtering to mock data
+    let filtered = [...mockCompsData];
+    
+    if (params?.sector && params.sector !== 'All') {
+      filtered = filtered.filter(comp => comp.sector.toLowerCase().includes(params.sector!.toLowerCase()));
+    }
+    
+    if (params?.region && params.region !== 'All') {
+      filtered = filtered.filter(comp => comp.region === params.region);
+    }
+    
+    return filtered;
+  }
+}
+
+export async function getPrecedents(): Promise<PrecedentDeal[]> {
+  const store = useApiStatusStore.getState();
+  
+  try {
+    if (store.usingMocks) throw new Error('Using mocks');
+    
+    const response = await fetch(`${API_BASE_URL}/api/v1/precedents`, {
+      cache: 'no-store'
+    });
+    
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    
+    const data = await response.json();
+    return data.items || data;
+  } catch (error) {
+    console.warn('⚠️ Precedents API failed, using mock data:', error);
+    return mockPrecedentsData;
+  }
+}
+
+export async function getPrecedentById(id: string): Promise<PrecedentDeal | null> {
+  const store = useApiStatusStore.getState();
+  
+  try {
+    if (store.usingMocks) throw new Error('Using mocks');
+    
+    const response = await fetch(`${API_BASE_URL}/api/v1/precedents/${id}`, {
+      cache: 'no-store'
+    });
+    
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.warn('⚠️ Precedent detail API failed, using mock data:', error);
+    return mockPrecedentsData.find(deal => deal.id === id) || null;
+  }
+}
+
+export async function getLeagueTables(params?: { period?: string; sector?: string }): Promise<LeagueRow[]> {
+  const store = useApiStatusStore.getState();
+  
+  try {
+    if (store.usingMocks) throw new Error('Using mocks');
+    
+    const urlParams = new URLSearchParams();
+    if (params?.period && params.period !== 'All') urlParams.append('period', params.period);
+    if (params?.sector && params.sector !== 'All') urlParams.append('sector', params.sector);
+    
+    const response = await fetch(`${API_BASE_URL}/api/v1/league-tables?${urlParams.toString()}`, {
+      cache: 'no-store'
+    });
+    
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    
+    const data = await response.json();
+    return data.advisors || data;
+  } catch (error) {
+    console.warn('⚠️ League Tables API failed, using mock data:', error);
+    
+    // Apply basic filtering to mock data
+    let filtered = [...mockLeagueData];
+    
+    if (params?.period === '1Y') {
+      // Simulate 1Y filter by reducing deal counts/values
+      filtered = filtered.map(row => ({
+        ...row,
+        deals: Math.round(row.deals * 0.8),
+        total_value: Math.round(row.total_value * 0.8)
+      }));
+    }
+    
+    return filtered;
+  }
+}
+
+// Pure client-side DCF utility
+export function runDcf(
+  baseRevenue: number,
+  revGrowth: number[],    // e.g., [15,12,10,8,5]
+  ebitdaMargins: number[],// e.g., [25,26,27,27,28]
+  taxRatePct: number,     // e.g., 25
+  waccPct: number,        // e.g., 10
+  ltmGrowthPct: number    // e.g., 2.5
+) {
+  const wacc = waccPct / 100;
+  const ltGrowth = ltmGrowthPct / 100;
+  const taxRate = taxRatePct / 100;
+  
+  const yearly = [];
+  let revenue = baseRevenue;
+  
+  // Project 5 years
+  for (let i = 0; i < 5; i++) {
+    const year = new Date().getFullYear() + i + 1;
+    revenue = revenue * (1 + revGrowth[i] / 100);
+    const ebitda = revenue * (ebitdaMargins[i] / 100);
+    const ebit = ebitda; // Simplified, assuming D&A negligible
+    const tax = ebit * taxRate;
+    const nopat = ebit - tax;
+    const capex = revenue * 0.04; // Assume 4% of revenue
+    const workingCapital = revenue * 0.01; // Assume 1% of revenue
+    const fcf = nopat - capex - workingCapital;
+    const discountFactor = 1 / Math.pow(1 + wacc, i + 1);
+    const pv = fcf * discountFactor;
+    
+    yearly.push({
+      year,
+      revenue: Math.round(revenue),
+      ebitda: Math.round(ebitda),
+      fcf: Math.round(fcf),
+      discountFactor: Number(discountFactor.toFixed(4)),
+      pv: Math.round(pv)
+    });
+  }
+  
+  const sumPvFcf = yearly.reduce((sum, y) => sum + y.pv, 0);
+  const finalFcf = yearly[4].fcf;
+  const terminalValue = (finalFcf * (1 + ltGrowth)) / (wacc - ltGrowth);
+  const pvTerminalValue = terminalValue / Math.pow(1 + wacc, 5);
+  const ev = sumPvFcf + pvTerminalValue;
+  
+  return {
+    yearly,
+    ev: Math.round(ev),
+    terminalValue: Math.round(terminalValue),
+    pvTerminalValue: Math.round(pvTerminalValue),
+    sumPvFcf: Math.round(sumPvFcf),
+    // Additional fields for equity value calculation
+    equityValue: (sharesOutstanding: number, netCash: number = 0) => Math.round(ev + netCash),
+    impliedPrice: (sharesOutstanding: number, netCash: number = 0) => Number(((ev + netCash) / sharesOutstanding).toFixed(2))
+  };
+}

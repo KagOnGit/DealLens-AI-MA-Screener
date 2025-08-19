@@ -1,319 +1,388 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { DataTable } from '@/components/ui/data-table';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { Download, Filter, Save } from 'lucide-react';
+import { DataSourceChip } from "@/components/common/DataSourceChip";
 
-interface CompsData {
-  summary: {
-    count: number;
-    sector: string;
-    avg_market_cap: number;
-    median_pe: number;
-    median_ev_ebitda: number;
-  };
-  peers: Array<{
-    ticker: string;
-    name: string;
-    market_cap: number;
-    pe_ratio: number;
-    ev_ebitda: number;
-    ev_revenue: number;
-    price: number;
-    change_percent: number;
-  }>;
-  quartiles: {
-    pe_ratio: { q1: number; median: number; q3: number };
-    ev_ebitda: { q1: number; median: number; q3: number };
-    ev_revenue: { q1: number; median: number; q3: number };
-  };
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getComps, type CompRow } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ArrowUpDown, Download, Search, Filter } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+type SortField = keyof CompRow;
+type SortDirection = "asc" | "desc";
+
+function formatNumber(value: number, suffix?: string): string {
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}M${suffix || ""}`;
+  } else if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}K${suffix || ""}`;
+  }
+  return `${value.toFixed(1)}${suffix || ""}`;
 }
 
-import { getComps } from '@/lib/api';
+function formatCurrency(value: number): string {
+  return `$${formatNumber(value)}`;
+}
 
-async function fetchComps(params: any): Promise<CompsData> {
-  // Use the robust API client with fallbacks
-  const compsResponse = await getComps(params);
+function formatRatio(value: number): string {
+  return `${value.toFixed(1)}x`;
+}
+
+function exportToCSV(data: CompRow[], filename: string = "comps.csv") {
+  const headers = [
+    "Ticker", "Company", "Sector", "Region", "Price", "Market Cap ($M)", 
+    "Revenue ($M)", "EBITDA ($M)", "P/E", "EV/EBITDA", "EV/Sales"
+  ];
   
-  // Transform to expected format
-  const mockSummary = {
-    count: compsResponse.total || 0,
-    sector: 'Technology',
-    avg_market_cap: compsResponse.items.reduce((sum, item) => sum + item.market_cap, 0) / compsResponse.items.length / 1000 || 0,
-    median_pe: compsResponse.items.sort((a, b) => a.pe - b.pe)[Math.floor(compsResponse.items.length / 2)]?.pe || 0,
-    median_ev_ebitda: compsResponse.items.sort((a, b) => a.ev_ebitda - b.ev_ebitda)[Math.floor(compsResponse.items.length / 2)]?.ev_ebitda || 0
-  };
-  
-  const peers = compsResponse.items.map(item => ({
-    ticker: item.ticker,
-    name: item.name,
-    market_cap: item.market_cap / 1000, // Convert to billions
-    pe_ratio: item.pe,
-    ev_ebitda: item.ev_ebitda,
-    ev_revenue: item.revenue ? (item.market_cap / item.revenue) : 0,
-    price: 100 + Math.random() * 200, // Mock price
-    change_percent: (Math.random() - 0.5) * 10 // Mock change
-  }));
-  
-  return {
-    summary: mockSummary,
-    peers,
-    quartiles: {
-      pe_ratio: { q1: 20, median: mockSummary.median_pe, q3: 35 },
-      ev_ebitda: { q1: 12, median: mockSummary.median_ev_ebitda, q3: 25 },
-      ev_revenue: { q1: 2, median: 4, q3: 8 }
-    }
-  };
+  const csvContent = [
+    headers.join(","),
+    ...data.map(row => [
+      row.ticker,
+      `"${row.name}"`,
+      `"${row.sector}"`,
+      row.region,
+      row.price.toFixed(2),
+      (row.market_cap / 1000).toFixed(0),
+      (row.revenue / 1000).toFixed(0),
+      (row.ebitda / 1000).toFixed(0),
+      row.pe.toFixed(1),
+      row.ev_ebitda.toFixed(1),
+      row.ev_sales.toFixed(1)
+    ].join(","))
+  ].join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 export default function CompsPage() {
-  const [filters, setFilters] = useState({
-    sector: '',
-    region: '',
-    ticker: '',
-    size_min: '',
-    size_max: ''
-  });
+  const [search, setSearch] = useState("");
+  const [sectorFilter, setSectorFilter] = useState<string>("All");
+  const [regionFilter, setRegionFilter] = useState<string>("All");
+  const [sortField, setSortField] = useState<SortField>("market_cap");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  const { data: compsData, isLoading, error } = useQuery({
-    queryKey: ['comps', filters],
-    queryFn: () => fetchComps(filters),
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["comps", { sector: sectorFilter, region: regionFilter }],
+    queryFn: () => getComps({ 
+      sector: sectorFilter !== "All" ? sectorFilter : undefined,
+      region: regionFilter !== "All" ? regionFilter : undefined 
+    }),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  const handleFilterChange = (key: string, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-  };
-
-  const exportToCsv = () => {
-    if (!compsData?.peers) return;
+  const filteredAndSortedData = useMemo(() => {
+    if (!data) return [];
     
-    const headers = ['Ticker', 'Name', 'Market Cap ($B)', 'P/E Ratio', 'EV/EBITDA', 'EV/Revenue', 'Price', 'Change %'];
-    const rows = compsData.peers.map(peer => [
-      peer.ticker,
-      peer.name,
-      peer.market_cap.toFixed(1),
-      peer.pe_ratio?.toFixed(1) || 'N/A',
-      peer.ev_ebitda?.toFixed(1) || 'N/A', 
-      peer.ev_revenue?.toFixed(1) || 'N/A',
-      peer.price?.toFixed(2) || 'N/A',
-      peer.change_percent?.toFixed(2) || 'N/A'
-    ]);
+    let filtered = data.filter(comp => {
+      const matchesSearch = search === "" || 
+        comp.name.toLowerCase().includes(search.toLowerCase()) ||
+        comp.ticker.toLowerCase().includes(search.toLowerCase());
+      
+      return matchesSearch;
+    });
 
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
-      .join('\n');
+    // Sort data
+    filtered.sort((a, b) => {
+      const aVal = a[sortField];
+      const bVal = b[sortField];
+      
+      if (typeof aVal === "string" && typeof bVal === "string") {
+        const comparison = aVal.localeCompare(bVal);
+        return sortDirection === "asc" ? comparison : -comparison;
+      }
+      
+      if (typeof aVal === "number" && typeof bVal === "number") {
+        const comparison = aVal - bVal;
+        return sortDirection === "asc" ? comparison : -comparison;
+      }
+      
+      return 0;
+    });
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `comps_analysis_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    return filtered;
+  }, [data, search, sortField, sortDirection]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
+    }
   };
 
-  const columns = [
-    { accessorKey: 'ticker', header: 'Ticker' },
-    { accessorKey: 'name', header: 'Company' },
-    { 
-      accessorKey: 'market_cap', 
-      header: 'Market Cap ($B)',
-      cell: ({ row }: any) => `$${row.getValue('market_cap').toFixed(1)}B`
-    },
-    { 
-      accessorKey: 'pe_ratio', 
-      header: 'P/E',
-      cell: ({ row }: any) => row.getValue('pe_ratio')?.toFixed(1) || 'N/A'
-    },
-    { 
-      accessorKey: 'ev_ebitda', 
-      header: 'EV/EBITDA',
-      cell: ({ row }: any) => row.getValue('ev_ebitda')?.toFixed(1) || 'N/A'
-    },
-    { 
-      accessorKey: 'ev_revenue', 
-      header: 'EV/Revenue',
-      cell: ({ row }: any) => row.getValue('ev_revenue')?.toFixed(1) || 'N/A'
-    },
-    { 
-      accessorKey: 'change_percent', 
-      header: 'Change %',
-      cell: ({ row }: any) => {
-        const change = row.getValue('change_percent') as number;
-        return (
-          <Badge variant={change >= 0 ? 'default' : 'destructive'}>
-            {change >= 0 ? '+' : ''}{change?.toFixed(2)}%
-          </Badge>
-        );
-      }
-    }
-  ];
+  const sectors = useMemo(() => {
+    if (!data) return [];
+    const uniqueSectors = Array.from(new Set(data.map(comp => comp.sector)));
+    return uniqueSectors.sort();
+  }, [data]);
 
-  if (isLoading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-96">
-          <LoadingSpinner />
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const regions = useMemo(() => {
+    if (!data) return [];
+    const uniqueRegions = Array.from(new Set(data.map(comp => comp.region)));
+    return uniqueRegions.sort();
+  }, [data]);
 
   if (error) {
     return (
-      <DashboardLayout>
-        <div className="p-6 text-center">
-          <p className="text-red-500">Error loading comps data: {(error as Error).message}</p>
-        </div>
-      </DashboardLayout>
+      <div className="container mx-auto px-4 py-8">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <p className="text-red-400 text-lg">Failed to load comparables data</p>
+            <p className="text-muted-foreground mt-2">
+              Please check your connection or try again later.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <DashboardLayout>
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Comparable Companies</h1>
-            <p className="text-muted-foreground">
-              Analyze valuation multiples and trading metrics across peer companies
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={exportToCsv}>
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV
-            </Button>
-            <Button variant="outline">
-              <Save className="w-4 h-4 mr-2" />
-              Save Filter
-            </Button>
-          </div>
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Comparable Companies</h1>
+          <div className="mt-2"><DataSourceChip /></div>
+          <p className="text-muted-foreground">
+            Analyze and compare public companies across sectors and regions
+          </p>
         </div>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={() => filteredAndSortedData.length > 0 && exportToCSV(filteredAndSortedData)}
+            disabled={isLoading || filteredAndSortedData.length === 0}
+            className="gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
+      </div>
 
-        {/* Filters */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="w-4 h-4" />
-              Filters
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div>
-                <label className="text-sm font-medium">Ticker</label>
+      {/* Filters */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" />
+            Filters
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
-                  placeholder="e.g. AAPL"
-                  value={filters.ticker}
-                  onChange={(e) => handleFilterChange('ticker', e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Sector</label>
-                <Select onValueChange={(value) => handleFilterChange('sector', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All sectors" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All sectors</SelectItem>
-                    <SelectItem value="Technology">Technology</SelectItem>
-                    <SelectItem value="Healthcare">Healthcare</SelectItem>
-                    <SelectItem value="Financials">Financials</SelectItem>
-                    <SelectItem value="Energy">Energy</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Region</label>
-                <Select onValueChange={(value) => handleFilterChange('region', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All regions" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All regions</SelectItem>
-                    <SelectItem value="North America">North America</SelectItem>
-                    <SelectItem value="Europe">Europe</SelectItem>
-                    <SelectItem value="Asia">Asia</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Min Market Cap ($B)</label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={filters.size_min}
-                  onChange={(e) => handleFilterChange('size_min', e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Max Market Cap ($B)</label>
-                <Input
-                  type="number"
-                  placeholder="No limit"
-                  value={filters.size_max}
-                  onChange={(e) => handleFilterChange('size_max', e.target.value)}
+                  placeholder="Search companies..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
                 />
               </div>
             </div>
-          </CardContent>
-        </Card>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Sector</label>
+              <Select value={sectorFilter} onValueChange={setSectorFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Sectors</SelectItem>
+                  {sectors.map(sector => (
+                    <SelectItem key={sector} value={sector}>{sector}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-        {/* Summary */}
-        {compsData && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Companies</CardDescription>
-                <CardTitle className="text-2xl">{compsData.summary.count}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Avg Market Cap</CardDescription>
-                <CardTitle className="text-2xl">${compsData.summary.avg_market_cap.toFixed(1)}B</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Median P/E</CardDescription>
-                <CardTitle className="text-2xl">{compsData.summary.median_pe.toFixed(1)}x</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Median EV/EBITDA</CardDescription>
-                <CardTitle className="text-2xl">{compsData.summary.median_ev_ebitda.toFixed(1)}x</CardTitle>
-              </CardHeader>
-            </Card>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Region</label>
+              <Select value={regionFilter} onValueChange={setRegionFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Regions</SelectItem>
+                  {regions.map(region => (
+                    <SelectItem key={region} value={region}>{region}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        )}
+        </CardContent>
+      </Card>
 
-        {/* Data Table */}
-        {compsData && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Peer Analysis</CardTitle>
-              <CardDescription>
-                Comparative analysis of {compsData.summary.sector} companies
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <DataTable columns={columns} data={compsData.peers} />
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </DashboardLayout>
+      {/* Results Summary */}
+      {!isLoading && (
+        <div className="mb-6">
+          <p className="text-sm text-muted-foreground">
+            Showing {filteredAndSortedData.length} companies
+            {sectorFilter !== "All" && ` in ${sectorFilter}`}
+            {regionFilter !== "All" && ` from ${regionFilter}`}
+          </p>
+        </div>
+      )}
+
+      {/* Data Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead 
+                    className="cursor-pointer select-none p-4"
+                    onClick={() => handleSort("ticker")}
+                  >
+                    <div className="flex items-center gap-2">
+                      Ticker
+                      <ArrowUpDown className="h-4 w-4" />
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer select-none"
+                    onClick={() => handleSort("name")}
+                  >
+                    <div className="flex items-center gap-2">
+                      Company
+                      <ArrowUpDown className="h-4 w-4" />
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer select-none"
+                    onClick={() => handleSort("sector")}
+                  >
+                    <div className="flex items-center gap-2">
+                      Sector
+                      <ArrowUpDown className="h-4 w-4" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right">Region</TableHead>
+                  <TableHead 
+                    className="text-right cursor-pointer select-none"
+                    onClick={() => handleSort("price")}
+                  >
+                    <div className="flex items-center justify-end gap-2">
+                      Price
+                      <ArrowUpDown className="h-4 w-4" />
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="text-right cursor-pointer select-none"
+                    onClick={() => handleSort("market_cap")}
+                  >
+                    <div className="flex items-center justify-end gap-2">
+                      Market Cap
+                      <ArrowUpDown className="h-4 w-4" />
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="text-right cursor-pointer select-none"
+                    onClick={() => handleSort("pe")}
+                  >
+                    <div className="flex items-center justify-end gap-2">
+                      P/E
+                      <ArrowUpDown className="h-4 w-4" />
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="text-right cursor-pointer select-none"
+                    onClick={() => handleSort("ev_ebitda")}
+                  >
+                    <div className="flex items-center justify-end gap-2">
+                      EV/EBITDA
+                      <ArrowUpDown className="h-4 w-4" />
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="text-right cursor-pointer select-none"
+                    onClick={() => handleSort("ev_sales")}
+                  >
+                    <div className="flex items-center justify-end gap-2">
+                      EV/Sales
+                      <ArrowUpDown className="h-4 w-4" />
+                    </div>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 9 }).map((_, j) => (
+                        <TableCell key={j} className="p-4">
+                          <div className="h-4 bg-muted animate-pulse rounded" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : filteredAndSortedData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8">
+                      <p className="text-muted-foreground">No companies found</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredAndSortedData.map((comp) => (
+                    <TableRow key={comp.ticker} className="hover:bg-muted/50">
+                      <TableCell className="font-mono font-semibold p-4">
+                        {comp.ticker}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {comp.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-xs">
+                          {comp.sector}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline" className="text-xs">
+                          {comp.region}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        ${comp.price.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatCurrency(comp.market_cap / 1000)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatRatio(comp.pe)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatRatio(comp.ev_ebitda)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatRatio(comp.ev_sales)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

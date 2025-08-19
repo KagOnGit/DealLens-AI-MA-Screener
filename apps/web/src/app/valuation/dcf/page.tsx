@@ -1,4 +1,6 @@
-'use client';
+"use client";
+
+import { DataSourceChip } from "@/components/common/DataSourceChip";
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
@@ -44,20 +46,81 @@ interface DCFResults {
   };
 }
 
-async function calculateDCF(inputs: DCFInputs): Promise<DCFResults> {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/valuation/dcf`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+import { runDcf } from '@/lib/api';
+
+function calculateDCF(inputs: DCFInputs): DCFResults {
+  // Convert inputs to match runDcf function signature
+  const baseRevenue = inputs.revenue_base;
+  const revGrowth = inputs.revenue_growth.map(g => g * 100); // Convert to percentages
+  const ebitdaMargins = inputs.ebitda_margin.map(m => m * 100); // Convert to percentages
+  const taxRatePct = inputs.tax_rate * 100;
+  const waccPct = inputs.wacc * 100;
+  const ltmGrowthPct = inputs.ltg * 100;
+
+  // Run the DCF calculation
+  const result = runDcf(
+    baseRevenue,
+    revGrowth,
+    ebitdaMargins,
+    taxRatePct,
+    waccPct,
+    ltmGrowthPct
+  );
+
+  // Generate sensitivity analysis
+  const waccRange = [
+    waccPct - 2,
+    waccPct - 1,
+    waccPct,
+    waccPct + 1,
+    waccPct + 2
+  ].map(w => w / 100);
+  
+  const ltgRange = [
+    ltmGrowthPct - 1,
+    ltmGrowthPct - 0.5,
+    ltmGrowthPct,
+    ltmGrowthPct + 0.5,
+    ltmGrowthPct + 1
+  ].map(g => g / 100);
+
+  const evGrid = waccRange.map(w => 
+    ltgRange.map(g => {
+      try {
+        const sensitivityResult = runDcf(
+          baseRevenue,
+          revGrowth,
+          ebitdaMargins,
+          w * 100,
+          w * 100,
+          g * 100
+        );
+        return sensitivityResult.ev;
+      } catch {
+        return 0;
+      }
+    })
+  );
+
+  return {
+    inputs,
+    projections: {
+      revenues: result.yearly.map(y => y.revenue),
+      ebitdas: result.yearly.map(y => y.ebitda),
+      free_cash_flows: result.yearly.map(y => y.fcf)
     },
-    body: JSON.stringify(inputs),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to calculate DCF');
-  }
-
-  return response.json();
+    valuation: {
+      pv_of_fcfs: result.sumPvFcf,
+      pv_of_terminal: result.pvTerminalValue,
+      enterprise_value: result.ev,
+      terminal_value: result.terminalValue
+    },
+    sensitivity: {
+      wacc_range: waccRange,
+      ltg_range: ltgRange,
+      ev_grid: evGrid
+    }
+  };
 }
 
 export default function DCFPage() {
@@ -73,15 +136,8 @@ export default function DCFPage() {
     years: 5,
   });
 
-  const dcfMutation = useMutation({
-    mutationFn: calculateDCF,
-    onError: (error) => {
-      toast.error(`DCF calculation failed: ${error.message}`);
-    },
-    onSuccess: () => {
-      toast.success('DCF calculation completed');
-    },
-  });
+  const [results, setResults] = useState<DCFResults | null>(null);
+  const [isCalculating, setIsCalculating] = useState(false);
 
   const handleInputChange = (field: keyof DCFInputs, value: number) => {
     setInputs(prev => ({ ...prev, [field]: value }));
@@ -96,10 +152,17 @@ export default function DCFPage() {
   };
 
   const handleCalculate = () => {
-    dcfMutation.mutate(inputs);
+    setIsCalculating(true);
+    try {
+      const dcfResults = calculateDCF(inputs);
+      setResults(dcfResults);
+      toast.success('DCF calculation completed');
+    } catch (error) {
+      toast.error(`DCF calculation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsCalculating(false);
+    }
   };
-
-  const results = dcfMutation.data;
 
   return (
     <DashboardLayout>
@@ -107,12 +170,13 @@ export default function DCFPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">DCF Valuation Model</h1>
+            <div className="mt-2"><DataSourceChip /></div>
             <p className="text-muted-foreground">
               Build discounted cash flow models with sensitivity analysis
             </p>
           </div>
-          <Button onClick={handleCalculate} disabled={dcfMutation.isPending}>
-            {dcfMutation.isPending ? (
+          <Button onClick={handleCalculate} disabled={isCalculating}>
+            {isCalculating ? (
               <LoadingSpinner className="w-4 h-4 mr-2" />
             ) : (
               <Calculator className="w-4 h-4 mr-2" />

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import Link from 'next/link'
 import { ApiStatusBadge } from '../ApiStatusBadge'
 import { NotificationsPopover } from '../notifications/NotificationsPopover'
 import { GlobalSearch } from '../search/GlobalSearch'
@@ -107,6 +108,11 @@ export function Header() {
             <div className="text-terminal-primary font-mono">{currentTime.timeString} EST</div>
             <div className="text-gray-400">{currentTime.dateString}</div>
           </div>
+          
+          {/* About link */}
+          <div className="hidden sm:flex items-center">
+            <Link href="/about" aria-label="About DealLens" className="text-xs text-muted-foreground hover:text-foreground transition-colors">About</Link>
+          </div>
         </div>
       </div>
 
@@ -126,9 +132,6 @@ export function Header() {
           <span>DATA: REAL-TIME</span>
         </div>
       </div>
-      <div className="ml-auto hidden sm:flex items-center gap-3">
-      <Link href="/about" aria-label="About DealLens" className="text-xs text-muted-foreground hover:text-foreground transition-colors">About</Link>
-    </div>
   </header>
   )
 }
