@@ -1,3 +1,4 @@
+import { AppFooter } from "@/components/layout/AppFooter";
 import { logEnvHealthOnce } from "@/lib/env-guard";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -23,11 +24,11 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({
-  if (typeof window !== "undefined") logEnvHealthOnce();
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  if (typeof window !== "undefined") logEnvHealthOnce();
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -44,7 +45,8 @@ export default function RootLayout({
           </QueryProvider>
         </ThemeProvider>
         <Analytics />
-      </body>
+        <AppFooter />
+    </body>
     </html>
   );
 }

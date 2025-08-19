@@ -126,6 +126,9 @@ export function Header() {
           <span>DATA: REAL-TIME</span>
         </div>
       </div>
-    </header>
+      <div className="ml-auto hidden sm:flex items-center gap-3">
+      <Link href="/about" aria-label="About DealLens" className="text-xs text-muted-foreground hover:text-foreground transition-colors">About</Link>
+    </div>
+  </header>
   )
 }
