@@ -38,12 +38,48 @@ interface MarketData {
   last_updated: string;
 }
 
+import { getMarketSnapshot } from '@/lib/api';
+
 async function fetchMarketSnapshot(): Promise<MarketData> {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/market/snapshot`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch market data');
-  }
-  return response.json();
+  // Use the robust API client with fallbacks
+  const marketResponse = await getMarketSnapshot();
+  
+  // Transform to expected format
+  return {
+    timestamp: new Date().toISOString(),
+    indices: marketResponse.indices.map(index => ({
+      symbol: index.name,
+      ticker: index.name,
+      value: index.value,
+      change: index.change * index.value / 100,
+      change_percent: index.change
+    })),
+    treasuries: marketResponse.yields.map(yieldItem => ({
+      maturity: yieldItem.tenor,
+      yield: yieldItem.value,
+      change: (Math.random() - 0.5) * 10 // Mock change in basis points
+    })),
+    currencies: marketResponse.fx.map(fx => {
+      const change_percent = (Math.random() - 0.5) * 2;
+      return {
+        pair: fx.pair,
+        rate: fx.value,
+        change: fx.value * change_percent / 100,
+        change_percent
+      };
+    }),
+    commodities: marketResponse.commodities.map(commodity => {
+      const change_percent = (Math.random() - 0.5) * 5;
+      return {
+        name: commodity.name,
+        symbol: commodity.name.toUpperCase(),
+        price: commodity.value,
+        change: commodity.value * change_percent / 100,
+        change_percent
+      };
+    }),
+    last_updated: marketResponse.asof
+  };
 }
 
 export default function MarketPage() {

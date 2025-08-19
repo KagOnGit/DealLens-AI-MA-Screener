@@ -1,5 +1,5 @@
 "use client";
-import { usePrecedents } from "@/src/lib/api";
+import { usePrecedents } from "@/lib/api";
 
 export default function PrecedentsPage() {
   const { data, isLoading, error } = usePrecedents({ page:1, page_size:50 });
