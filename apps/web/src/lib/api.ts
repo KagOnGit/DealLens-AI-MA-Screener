@@ -2067,3 +2067,79 @@ export function useDealsStatsNew(filters?: {
 }
 
 export { API_BASE_URL };
+
+// ----------------------------
+// IB Endpoints & Fallbacks
+// ----------------------------
+const PROXY = "/api/proxy"; // local proxy to avoid CORS in prod
+
+type CompsRow = {
+  ticker: string; name: string; sector: string; region: string;
+  market_cap: number; revenue: number; ebitda: number; pe: number; ev_ebitda: number;
+};
+type CompsResponse = { items: CompsRow[]; total: number; page: number; page_size: number; };
+type PrecedentDeal = { id: string; acquirer: string; target: string; announced: string; value: number; industry: string; status: string; ev_ebitda?: number; premium?: number; };
+type PrecedentsResponse = { items: PrecedentDeal[]; total: number; page: number; page_size: number; };
+type MarketSnapshot = { indices: { name: string; value: number; change: number; }[]; yields: { tenor: string; value: number; }[]; fx: { pair: string; value: number;}[]; commodities: { name: string; value: number; }[]; asof: string; };
+
+// Mock data for IB pages (used when API fails or USE_MOCKS=true)
+const mockComps: CompsResponse = {
+  items: [
+    { ticker:"AAPL", name:"Apple Inc.", sector:"Technology", region:"US", market_cap:2800000, revenue:385000, ebitda:130000, pe:28.2, ev_ebitda:20.5 },
+    { ticker:"MSFT", name:"Microsoft Corp.", sector:"Technology", region:"US", market_cap:3100000, revenue:250000, ebitda:120000, pe:35.1, ev_ebitda:22.1 },
+    { ticker:"GOOGL", name:"Alphabet Inc.", sector:"Communication Services", region:"US", market_cap:2100000, revenue:305000, ebitda:98000, pe:26.4, ev_ebitda:17.9 },
+  ],
+  total: 3, page: 1, page_size: 50,
+};
+const mockPrecedents: PrecedentsResponse = {
+  items: [
+    { id:"msft-atvi", acquirer:"Microsoft", target:"Activision Blizzard", announced:"2022-01-18", value:68700, industry:"Technology", status:"Completed", ev_ebitda:18.8, premium:45.3 },
+    { id:"avgo-vmw", acquirer:"Broadcom", target:"VMware", announced:"2022-05-26", value:69000, industry:"Technology", status:"Completed", ev_ebitda:19.2, premium:49.0 },
+  ],
+  total: 2, page:1, page_size: 50,
+};
+const mockMarket: MarketSnapshot = {
+  indices: [
+    { name:"SPX", value:4567.8, change: 1.2 },
+    { name:"NDX", value:14234.5, change: 0.8 },
+    { name:"DJIA", value:35678.9, change: 0.2 },
+  ],
+  yields: [{tenor:"2Y", value:4.78},{tenor:"10Y", value:4.12},{tenor:"30Y", value:4.03}],
+  fx: [{pair:"EURUSD", value:1.091},{pair:"USDJPY", value:155.4}],
+  commodities: [{name:"WTI", value:77.2},{name:"Gold", value:2310}],
+  asof: new Date().toISOString(),
+};
+
+async function safeFetch<T>(path: string, mock: T, init?: RequestInit): Promise<T> {
+  const url = `${PROXY}/${path.replace(/^\/+/, "")}`;
+  try {
+    const store = useApiStatusStore.getState();
+    if (store.usingMocks) return mock;
+    const r = await fetch(url, { ...init, cache: "no-store" });
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    return (await r.json()) as T;
+  } catch (e) {
+    console.warn(`⚠️ Falling back to mock for ${path}:`, e);
+    return mock;
+  }
+}
+
+export async function getComps(params: Record<string,string|number> = {}): Promise<CompsResponse> {
+  const qs = new URLSearchParams(Object.entries(params).map(([k,v])=>[k,String(v)])).toString();
+  return safeFetch<CompsResponse>(`api/v1/comps${qs ? `?${qs}` : ""}`, mockComps);
+}
+export async function getPrecedents(params: Record<string,string|number> = {}): Promise<PrecedentsResponse> {
+  const qs = new URLSearchParams(Object.entries(params).map(([k,v])=>[k,String(v)])).toString();
+  return safeFetch<PrecedentsResponse>(`api/v1/precedents${qs ? `?${qs}` : ""}`, mockPrecedents);
+}
+export async function getMarketSnapshot(): Promise<MarketSnapshot> {
+  return safeFetch<MarketSnapshot>("api/v1/market/snapshot", mockMarket);
+}
+
+// React Query hooks for IB endpoints
+export const useComps = (params: Record<string,string|number> = {}) =>
+  useQuery({ queryKey:["comps", params], queryFn: () => getComps(params), staleTime: 5*60*1000 });
+export const usePrecedents = (params: Record<string,string|number> = {}) =>
+  useQuery({ queryKey:["precedents", params], queryFn: () => getPrecedents(params), staleTime: 5*60*1000 });
+export const useMarketSnapshot = () =>
+  useQuery({ queryKey:["market/snapshot"], queryFn: getMarketSnapshot, refetchInterval: 60*1000 });
