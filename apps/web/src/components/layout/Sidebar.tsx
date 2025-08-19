@@ -8,7 +8,12 @@ import {
   DocumentDuplicateIcon,
   ChartBarIcon,
   BellIcon,
-  Cog6ToothIcon
+  Cog6ToothIcon,
+  ScaleIcon,
+  PresentationChartLineIcon,
+  CurrencyDollarIcon,
+  DocumentTextIcon,
+  TrophyIcon
 } from '@heroicons/react/24/outline'
 
 interface SidebarProps {
@@ -21,43 +26,72 @@ const navigation = [
   { name: 'Deals', href: '/deals', icon: DocumentDuplicateIcon },
   { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
   { name: 'Alerts', href: '/alerts', icon: BellIcon },
+]
+
+const ibNavigation = [
+  { name: 'Comps', href: '/comps', icon: ScaleIcon },
+  { name: 'Precedents', href: '/precedents', icon: DocumentTextIcon },
+  { name: 'League Tables', href: '/league-tables', icon: TrophyIcon },
+  { name: 'DCF Model', href: '/valuation/dcf', icon: CurrencyDollarIcon },
+  { name: 'Market', href: '/market', icon: PresentationChartLineIcon },
+]
+
+const bottomNavigation = [
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ]
 
 export function Sidebar({ isCollapsed }: SidebarProps) {
   const pathname = usePathname()
 
+  const renderNavItem = (item: any) => {
+    const isActive = pathname === item.href
+    return (
+      <Link
+        key={item.name}
+        href={item.href}
+        className={`
+          group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors
+          ${
+            isActive
+              ? 'bg-terminal-primary text-black'
+              : 'text-white hover:bg-terminal-border hover:text-terminal-primary'
+          }
+        `}
+        title={isCollapsed ? item.name : undefined}
+      >
+        <item.icon
+          className={`
+            flex-shrink-0 h-5 w-5
+            ${isActive ? 'text-black' : 'text-terminal-primary'}
+            ${isCollapsed ? '' : 'mr-3'}
+          `}
+        />
+        {!isCollapsed && (
+          <span className="truncate">{item.name}</span>
+        )}
+      </Link>
+    )
+  }
+
   return (
-    <nav className="flex-1 px-2 py-4 space-y-1">
-      {navigation.map((item) => {
-        const isActive = pathname === item.href
-        return (
-          <Link
-            key={item.name}
-            href={item.href}
-            className={`
-              group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors
-              ${
-                isActive
-                  ? 'bg-terminal-primary text-black'
-                  : 'text-white hover:bg-terminal-border hover:text-terminal-primary'
-              }
-            `}
-            title={isCollapsed ? item.name : undefined}
-          >
-            <item.icon
-              className={`
-                flex-shrink-0 h-5 w-5
-                ${isActive ? 'text-black' : 'text-terminal-primary'}
-                ${isCollapsed ? '' : 'mr-3'}
-              `}
-            />
-            {!isCollapsed && (
-              <span className="truncate">{item.name}</span>
-            )}
-          </Link>
-        )
-      })}
+    <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+      {/* Main Navigation */}
+      {navigation.map(renderNavItem)}
+      
+      {/* Investment Banking Section */}
+      {!isCollapsed && (
+        <div className="pt-4 border-t border-terminal-border">
+          <div className="px-2 text-xs text-terminal-primary mb-2 font-semibold">
+            INVESTMENT BANKING
+          </div>
+        </div>
+      )}
+      {ibNavigation.map(renderNavItem)}
+      
+      {/* Bottom Navigation */}
+      <div className="pt-4 border-t border-terminal-border">
+        {bottomNavigation.map(renderNavItem)}
+      </div>
 
       {/* Market Status Indicator */}
       {!isCollapsed && (
