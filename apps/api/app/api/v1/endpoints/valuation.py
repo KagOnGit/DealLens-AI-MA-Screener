@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import numpy as np
 
@@ -10,17 +10,40 @@ from ....core.deps import get_db
 router = APIRouter()
 
 
-class DCFInputs(BaseModel):
-    ticker: str = None
-    revenue_base: float = 1000.0  # Base revenue in millions
-    revenue_growth: List[float] = [0.15, 0.12, 0.10, 0.08, 0.05]  # 5-year growth rates
-    ebitda_margin: List[float] = [0.25, 0.26, 0.27, 0.27, 0.28]  # 5-year margins
+class DCFInput(BaseModel):
+    base_revenue: float  # millions
+    growth: List[float]  # 5-year growth rates
+    ebitda_margin: List[float]  # 5-year EBITDA margins
+    wacc: float  # discount rate
+    ltm_pe: Optional[float] = None
+    ltm_ev_ebitda: Optional[float] = None
     tax_rate: float = 0.25
-    capex_pct_revenue: List[float] = [0.08, 0.07, 0.06, 0.06, 0.05]  # CapEx as % of revenue
-    nwc_pct_revenue: float = 0.05  # Net working capital as % of revenue
-    wacc: float = 0.10  # Weighted average cost of capital
-    ltg: float = 0.025  # Long-term growth rate
-    years: int = 5
+    lgr: float  # long-term growth rate
+    shares_out: Optional[float] = None  # shares outstanding
+    net_debt: float = 0.0  # net debt, default 0
+
+class Projection(BaseModel):
+    year: int
+    revenue: float
+    ebitda: float
+    fcff: float  # Free Cash Flow to Firm
+    pv: float  # Present Value
+
+class SensitivityPoint(BaseModel):
+    wacc: float
+    g: float  # long-term growth
+    ev: float
+
+class DCFResponse(BaseModel):
+    projections: List[Projection]
+    pv_sum: float  # Sum of PV of FCFFs
+    tv_pv: float  # Present Value of Terminal Value
+    ev: float  # Enterprise Value
+    equity_value: Optional[float] = None  # EV - Net Debt
+    implied_price: Optional[float] = None  # Equity Value / Shares Outstanding
+    implied_pe: Optional[float] = None
+    implied_ev_ebitda: Optional[float] = None
+    sensitivity: List[SensitivityPoint]
 
 
 class LBOInputs(BaseModel):
@@ -36,92 +59,108 @@ class LBOInputs(BaseModel):
     ebitda_growth: List[float] = [0.08, 0.07, 0.06, 0.06, 0.05]  # EBITDA growth rates
 
 
-@router.post("/dcf", )
-async def calculate_dcf(
-    inputs: DCFInputs,
-    db: Session = Depends(get_db)
-):
+@router.post("/dcf", response_model=DCFResponse)
+async def calculate_dcf(inputs: DCFInput):
     """Calculate DCF valuation with sensitivity analysis."""
-    try:
-        # DCF calculation logic
-        revenues = []
-        ebitdas = []
-        fcfs = []
+    
+    projections = []
+    current_year = 2024
+    
+    # Calculate 5-year projections
+    for i in range(5):
+        year = current_year + i + 1
         
-        base_revenue = inputs.revenue_base
+        # Revenue projection
+        if i == 0:
+            revenue = inputs.base_revenue * (1 + inputs.growth[i])
+        else:
+            revenue = projections[i-1].revenue * (1 + inputs.growth[i])
         
-        for i in range(inputs.years):
-            revenue = base_revenue * (1 + inputs.revenue_growth[i])
-            ebitda = revenue * inputs.ebitda_margin[i]
-            
-            # NOPAT calculation
-            nopat = ebitda * (1 - inputs.tax_rate)
-            
-            # Free Cash Flow
-            capex = revenue * inputs.capex_pct_revenue[i]
-            nwc_change = revenue * inputs.nwc_pct_revenue * inputs.revenue_growth[i]
-            fcf = nopat - capex - nwc_change
-            
-            revenues.append(round(revenue, 1))
-            ebitdas.append(round(ebitda, 1))
-            fcfs.append(round(fcf, 1))
-            
-            base_revenue = revenue
+        # EBITDA calculation
+        ebitda = revenue * inputs.ebitda_margin[i]
         
-        # Terminal value
-        terminal_fcf = fcfs[-1] * (1 + inputs.ltg)
-        terminal_value = terminal_fcf / (inputs.wacc - inputs.ltg)
+        # Simplified FCFF calculation
+        # FCFF = EBITDA * (1 - tax_rate) - ΔWorking Capital - Capex
+        # Assumptions: ΔWC = 1% of revenue, Capex = 4% of revenue
+        delta_wc = revenue * 0.01
+        capex = revenue * 0.04
         
-        # Present values
-        pv_fcfs = []
-        for i, fcf in enumerate(fcfs):
-            pv = fcf / ((1 + inputs.wacc) ** (i + 1))
-            pv_fcfs.append(round(pv, 1))
+        fcff = ebitda * (1 - inputs.tax_rate) - delta_wc - capex
         
-        pv_terminal = terminal_value / ((1 + inputs.wacc) ** inputs.years)
+        # Present Value
+        pv = fcff / ((1 + inputs.wacc) ** (i + 1))
         
-        enterprise_value = sum(pv_fcfs) + pv_terminal
+        projections.append(Projection(
+            year=year,
+            revenue=revenue,
+            ebitda=ebitda,
+            fcff=fcff,
+            pv=pv
+        ))
+    
+    # Sum of PV of projections
+    pv_sum = sum(p.pv for p in projections)
+    
+    # Terminal Value calculation (Gordon Growth Model)
+    terminal_fcff = projections[-1].fcff * (1 + inputs.lgr)
+    terminal_value = terminal_fcff / (inputs.wacc - inputs.lgr)
+    tv_pv = terminal_value / ((1 + inputs.wacc) ** 5)  # Discount to present value
+    
+    # Enterprise Value
+    ev = pv_sum + tv_pv
+    
+    # Equity calculations
+    equity_value = None
+    implied_price = None
+    implied_pe = None
+    implied_ev_ebitda = None
+    
+    if inputs.shares_out and inputs.shares_out > 0:
+        equity_value = ev - inputs.net_debt
+        implied_price = equity_value / inputs.shares_out
         
-        # Sensitivity analysis
-        wacc_range = [inputs.wacc - 0.02, inputs.wacc - 0.01, inputs.wacc, inputs.wacc + 0.01, inputs.wacc + 0.02]
-        ltg_range = [inputs.ltg - 0.01, inputs.ltg - 0.005, inputs.ltg, inputs.ltg + 0.005, inputs.ltg + 0.01]
-        
-        sensitivity_grid = []
-        for wacc in wacc_range:
-            row = []
-            for ltg in ltg_range:
-                if wacc <= ltg:
-                    ev = enterprise_value  # Avoid division by zero
-                else:
-                    terminal_val = terminal_fcf / (wacc - ltg)
-                    pv_terminal_sens = terminal_val / ((1 + wacc) ** inputs.years)
-                    pv_fcfs_sens = [fcf / ((1 + wacc) ** (i + 1)) for i, fcf in enumerate(fcfs)]
-                    ev = sum(pv_fcfs_sens) + pv_terminal_sens
-                row.append(round(ev, 0))
-            sensitivity_grid.append(row)
-        
-        response = {
-            "inputs": inputs.dict(),
-            "projections": {
-                "revenues": revenues,
-                "ebitdas": ebitdas,
-                "free_cash_flows": fcfs
-            },
-            "valuation": {
-                "pv_of_fcfs": round(sum(pv_fcfs), 1),
-                "pv_of_terminal": round(pv_terminal, 1),
-                "enterprise_value": round(enterprise_value, 1),
-                "terminal_value": round(terminal_value, 1)
-            },
-            "sensitivity": {
-                "wacc_range": wacc_range,
-                "ltg_range": ltg_range,
-                "ev_grid": sensitivity_grid
-            }
-        }
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Implied multiples (using LTM if provided)
+        if inputs.ltm_pe and inputs.ltm_pe > 0:
+            # Approximate current earnings from P/E
+            current_earnings = equity_value / inputs.ltm_pe if inputs.ltm_pe else None
+            implied_pe = equity_value / current_earnings if current_earnings else None
+    
+    if inputs.ltm_ev_ebitda and inputs.ltm_ev_ebitda > 0:
+        current_ebitda = ev / inputs.ltm_ev_ebitda
+        implied_ev_ebitda = ev / current_ebitda if current_ebitda else None
+    
+    # Sensitivity Analysis
+    sensitivity = []
+    wacc_range = [inputs.wacc - 0.01, inputs.wacc - 0.005, inputs.wacc, inputs.wacc + 0.005, inputs.wacc + 0.01]
+    lgr_range = [inputs.lgr - 0.01, inputs.lgr - 0.005, inputs.lgr, inputs.lgr + 0.005, inputs.lgr + 0.01]
+    
+    for wacc in wacc_range:
+        for lgr in lgr_range:
+            if wacc > lgr:  # Ensure WACC > LTG for valid calculation
+                # Recalculate PV with different rates
+                sens_pv_sum = sum(p.fcff / ((1 + wacc) ** (i + 1)) for i, p in enumerate(projections))
+                sens_terminal_fcff = projections[-1].fcff * (1 + lgr)
+                sens_terminal_value = sens_terminal_fcff / (wacc - lgr)
+                sens_tv_pv = sens_terminal_value / ((1 + wacc) ** 5)
+                sens_ev = sens_pv_sum + sens_tv_pv
+                
+                sensitivity.append(SensitivityPoint(
+                    wacc=round(wacc, 3),
+                    g=round(lgr, 3),
+                    ev=round(sens_ev, 0)
+                ))
+    
+    return DCFResponse(
+        projections=projections,
+        pv_sum=pv_sum,
+        tv_pv=tv_pv,
+        ev=ev,
+        equity_value=equity_value,
+        implied_price=implied_price,
+        implied_pe=implied_pe,
+        implied_ev_ebitda=implied_ev_ebitda,
+        sensitivity=sensitivity
+    )
 
 
 @router.post("/lbo", )

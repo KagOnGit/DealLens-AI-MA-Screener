@@ -1,116 +1,140 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from typing import List, Optional
-import json
-from datetime import datetime, timedelta
-
-from ....core.deps import get_db
-from ....core.cache import cache_result
-from ....models import Company, CompsPeer
-# # from ....schemas.comps import CompsResponse, CompsDetail, CompsPeerData
+from fastapi import APIRouter, Query
+from typing import Optional, List
+from pydantic import BaseModel
 
 router = APIRouter()
 
+class CompItem(BaseModel):
+    ticker: str
+    name: str
+    sector: str
+    price: float
+    market_cap: int  # millions
+    pe: float
+    ev_ebitda: float
+    rev_growth: float
+    ebitda_margin: float
+    ndebt: int  # millions
 
-@router.get("/")
-@cache_result(expire=600)  # Cache for 10 minutes
+class CompSummary(BaseModel):
+    median_pe: float
+    median_ev_ebitda: float
+    count: int
+
+class CompsResponse(BaseModel):
+    items: List[CompItem]
+    total: int
+    page: int
+    limit: int
+    summary: CompSummary
+
+# Mock data for major companies
+MOCK_COMPS_DATA = [
+    CompItem(
+        ticker="AAPL", name="Apple Inc.", sector="Technology", price=180.50,
+        market_cap=2800000, pe=28.5, ev_ebitda=22.1, rev_growth=8.2, 
+        ebitda_margin=29.5, ndebt=15000
+    ),
+    CompItem(
+        ticker="MSFT", name="Microsoft Corporation", sector="Technology", price=378.25,
+        market_cap=2700000, pe=32.1, ev_ebitda=24.8, rev_growth=12.1, 
+        ebitda_margin=42.1, ndebt=22000
+    ),
+    CompItem(
+        ticker="GOOGL", name="Alphabet Inc.", sector="Communication Services", price=135.80,
+        market_cap=1700000, pe=25.4, ev_ebitda=18.9, rev_growth=9.8, 
+        ebitda_margin=27.3, ndebt=8500
+    ),
+    CompItem(
+        ticker="AMZN", name="Amazon.com Inc.", sector="Consumer Discretionary", price=142.33,
+        market_cap=1400000, pe=45.2, ev_ebitda=26.4, rev_growth=15.3, 
+        ebitda_margin=8.2, ndebt=35000
+    ),
+    CompItem(
+        ticker="TSLA", name="Tesla Inc.", sector="Consumer Discretionary", price=238.45,
+        market_cap=800000, pe=65.8, ev_ebitda=42.1, rev_growth=28.5, 
+        ebitda_margin=9.2, ndebt=5000
+    ),
+    CompItem(
+        ticker="META", name="Meta Platforms Inc.", sector="Communication Services", price=298.67,
+        market_cap=750000, pe=22.7, ev_ebitda=15.3, rev_growth=6.8, 
+        ebitda_margin=34.4, ndebt=0
+    ),
+    CompItem(
+        ticker="NVDA", name="NVIDIA Corporation", sector="Technology", price=875.25,
+        market_cap=2200000, pe=68.2, ev_ebitda=52.8, rev_growth=126.0, 
+        ebitda_margin=73.1, ndebt=1500
+    ),
+    CompItem(
+        ticker="CRM", name="Salesforce Inc.", sector="Technology", price=245.80,
+        market_cap=240000, pe=35.6, ev_ebitda=28.9, rev_growth=11.2, 
+        ebitda_margin=18.4, ndebt=8200
+    )
+]
+
+@router.get("/", response_model=CompsResponse)
 async def get_comps(
     sector: Optional[str] = Query(None, description="Filter by sector"),
-    region: Optional[str] = Query(None, description="Filter by region"),
-    size_min: Optional[float] = Query(None, description="Minimum market cap in billions"),
-    size_max: Optional[float] = Query(None, description="Maximum market cap in billions"),
-    ticker: Optional[str] = Query(None, description="Base company ticker"),
-    peer_set: Optional[str] = Query(None, description="Predefined peer set"),
-    db: Session = Depends(get_db)
+    cap_min: Optional[int] = Query(None, description="Minimum market cap in millions"),
+    cap_max: Optional[int] = Query(None, description="Maximum market cap in millions"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(50, ge=1, le=100, description="Items per page"),
+    sort: str = Query("ev_ebitda", description="Sort field"),
+    order: str = Query("asc", description="Sort order: asc or desc")
 ):
-    """Get comparable companies analysis with filters."""
-    try:
-        # Mock response for now - replace with actual logic
-        mock_data = {
-            "summary": {
-                "count": 15,
-                "sector": sector or "Technology",
-                "avg_market_cap": 125.8,
-                "median_pe": 24.5,
-                "median_ev_ebitda": 18.2
-            },
-            "peers": [
-                {
-                    "ticker": "AAPL",
-                    "name": "Apple Inc.",
-                    "market_cap": 2890.5,
-                    "pe_ratio": 28.4,
-                    "ev_ebitda": 22.1,
-                    "ev_revenue": 6.8,
-                    "price": 185.42,
-                    "change_percent": 1.2
-                },
-                {
-                    "ticker": "MSFT", 
-                    "name": "Microsoft Corporation",
-                    "market_cap": 2750.3,
-                    "pe_ratio": 32.1,
-                    "ev_ebitda": 24.8,
-                    "ev_revenue": 12.5,
-                    "price": 371.15,
-                    "change_percent": -0.8
-                }
-            ],
-            "quartiles": {
-                "pe_ratio": {"q1": 18.2, "median": 24.5, "q3": 31.7},
-                "ev_ebitda": {"q1": 14.1, "median": 18.2, "q3": 25.3},
-                "ev_revenue": {"q1": 4.2, "median": 7.8, "q3": 12.1}
-            }
-        }
-        return mock_data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/{ticker}")
-@cache_result(expire=600)  # Cache for 10 minutes  
-async def get_comps_detail(
-    ticker: str,
-    db: Session = Depends(get_db)
-):
-    """Get detailed comparable analysis for a specific company."""
-    try:
-        # Mock response for now
-        mock_detail = {
-            "company": {
-                "ticker": ticker.upper(),
-                "name": f"{ticker.upper()} Corporation",
-                "sector": "Technology",
-                "market_cap": 150.5,
-                "pe_ratio": 26.3,
-                "ev_ebitda": 19.8,
-                "ev_revenue": 8.2
-            },
-            "peers": [
-                {
-                    "ticker": "PEER1",
-                    "name": "Peer Company 1",
-                    "market_cap": 145.2,
-                    "pe_ratio": 24.1,
-                    "ev_ebitda": 18.5,
-                    "ev_revenue": 7.8,
-                    "premium_discount": -0.08
-                },
-                {
-                    "ticker": "PEER2",
-                    "name": "Peer Company 2", 
-                    "market_cap": 168.9,
-                    "pe_ratio": 29.2,
-                    "ev_ebitda": 22.1,
-                    "ev_revenue": 9.1,
-                    "premium_discount": 0.12
-                }
-            ],
-            "valuation_ranges": {
-                "pe_implied": {"low": 22.5, "mid": 26.3, "high": 31.8},
-                "ev_ebitda_implied": {"low": 17.2, "mid": 19.8, "high": 24.1}
-            }
-        }
-        return mock_detail
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """Get comparable companies with filtering and pagination."""
+    
+    # Start with mock data (in real implementation, query database)
+    items = list(MOCK_COMPS_DATA)
+    
+    # Apply sector filter
+    if sector and sector.lower() != "all":
+        items = [item for item in items if sector.lower() in item.sector.lower()]
+    
+    # Apply market cap filters
+    if cap_min is not None:
+        items = [item for item in items if item.market_cap >= cap_min]
+    if cap_max is not None:
+        items = [item for item in items if item.market_cap <= cap_max]
+    
+    # Sort items
+    reverse = order.lower() == "desc"
+    if sort == "ev_ebitda":
+        items.sort(key=lambda x: x.ev_ebitda, reverse=reverse)
+    elif sort == "pe":
+        items.sort(key=lambda x: x.pe, reverse=reverse)
+    elif sort == "market_cap":
+        items.sort(key=lambda x: x.market_cap, reverse=reverse)
+    elif sort == "rev_growth":
+        items.sort(key=lambda x: x.rev_growth, reverse=reverse)
+    
+    # Calculate summary stats
+    if items:
+        pe_values = sorted([item.pe for item in items])
+        ev_ebitda_values = sorted([item.ev_ebitda for item in items])
+        
+        median_pe = pe_values[len(pe_values) // 2]
+        median_ev_ebitda = ev_ebitda_values[len(ev_ebitda_values) // 2]
+    else:
+        median_pe = 0.0
+        median_ev_ebitda = 0.0
+    
+    summary = CompSummary(
+        median_pe=median_pe,
+        median_ev_ebitda=median_ev_ebitda,
+        count=len(items)
+    )
+    
+    # Apply pagination
+    total = len(items)
+    start = (page - 1) * limit
+    end = start + limit
+    paginated_items = items[start:end]
+    
+    return CompsResponse(
+        items=paginated_items,
+        total=total,
+        page=page,
+        limit=limit,
+        summary=summary
+    )
