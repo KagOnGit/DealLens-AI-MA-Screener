@@ -124,7 +124,7 @@ function DealDetailContent({ dealId }: { dealId: string }) {
         <div className="flex items-center gap-4 text-sm text-white/70 mb-4">
           <span className="flex items-center gap-1">
             <Calendar className="h-4 w-4" />
-            Announced {new Date(dealDetail.announced_at).toLocaleDateString()}
+            Announced {dealDetail.announced_at ? new Date(dealDetail.announced_at).toLocaleDateString() : 'Unknown'}
           </span>
           {dealDetail.closed_at && (
             <span className="flex items-center gap-1">
@@ -134,7 +134,7 @@ function DealDetailContent({ dealId }: { dealId: string }) {
           )}
           <span className="flex items-center gap-1">
             <ChartBar className="h-4 w-4" />
-            ${dealDetail.value_usd.toLocaleString()}M
+            ${dealDetail.value_usd?.toLocaleString() || 'N/A'}M
           </span>
         </div>
 
@@ -169,7 +169,7 @@ function DealDetailContent({ dealId }: { dealId: string }) {
                 <MetricCard
                   key={index}
                   label={kpi.label}
-                  value={kpi.value}
+                  value={String(kpi.value)}
                   hint={kpi.hint}
                   trend={hasChange ? (isPositive ? 'up' : 'down') : undefined}
                   change={hasChange ? Math.abs(kpi.deltaPct!).toFixed(1) + '%' : undefined}
@@ -226,8 +226,8 @@ function DealDetailContent({ dealId }: { dealId: string }) {
                   title={party.role}
                   name={party.name}
                   ticker={party.ticker}
-                  industry={party.industry}
-                  country={party.country}
+                  industry={party.industry || 'N/A'}
+                  country={party.country || 'N/A'}
                   role={party.role}
                 />
               ))}
@@ -297,16 +297,16 @@ function DealDetailContent({ dealId }: { dealId: string }) {
         <div className="space-y-4">
           <MetricCard
             label="Transaction Value"
-            value={formatCurrency(dealDetail.value_usd)}
+            value={formatCurrency(dealDetail.value_usd || 0)}
           />
           <MetricCard
             label="Premium"
-            value={`${dealDetail.premium_pct > 0 ? '+' : ''}${dealDetail.premium_pct.toFixed(1)}%`}
-            trend={dealDetail.premium_pct > 0 ? 'up' : 'down'}
+            value={`${(dealDetail.premium_pct || 0) > 0 ? '+' : ''}${(dealDetail.premium_pct || 0).toFixed(1)}%`}
+            trend={(dealDetail.premium_pct || 0) > 0 ? 'up' : 'down'}
           />
           <MetricCard
             label="EV/EBITDA Multiple"
-            value={`${dealDetail.multiple_ev_ebitda.toFixed(1)}x`}
+            value={`${(dealDetail.multiple_ev_ebitda || 0).toFixed(1)}x`}
           />
         </div>
         

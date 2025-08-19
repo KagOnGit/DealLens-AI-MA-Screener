@@ -92,7 +92,7 @@ function DealsPageContent() {
 
   // Calculate summary stats
   const totalValue = useMemo(() => {
-    return deals.reduce((sum, deal) => sum + deal.value_usd, 0)
+  return deals.reduce((sum, deal) => sum + (deal.value_usd || 0), 0)
   }, [deals])
   
   const avgDealSize = useMemo(() => {
@@ -440,7 +440,7 @@ function DealsPageContent() {
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm mb-4">
                         <div>
                           <div className="text-gray-400 font-mono uppercase text-xs">Deal Value</div>
-                          <div className="text-white font-mono text-lg">{formatValue(deal.value_usd * 1000000)}</div>
+                          <div className="text-white font-mono text-lg">{formatValue((deal.value_usd || 0) * 1000000)}</div>
                         </div>
                         <div>
                           <div className="text-gray-400 font-mono uppercase text-xs">Industry</div>

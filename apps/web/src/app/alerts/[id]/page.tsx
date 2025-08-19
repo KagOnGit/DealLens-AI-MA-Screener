@@ -21,7 +21,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { useQuery } from '@tanstack/react-query'
 import { getAlertDetail, markAlertRead, trackEvent } from '../../../lib/api'
-import { AlertDetail, TimelineEntry, CompanySummary, NewsItem } from '../../../types'
+import { AlertDetail, TimelineEntry, CompanySummary, type NewsItem } from '../../../types'
 import { notFound } from 'next/navigation'
 
 interface AlertDetailPageProps {
